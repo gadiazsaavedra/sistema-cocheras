@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+client/node_modules/
+
+# Production builds
+client/build/
+build/
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Firebase credentials (IMPORTANTE: No subir credenciales)
+firebase-service-account.json
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Uploads y backups
+uploads/
+backups/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.temp
