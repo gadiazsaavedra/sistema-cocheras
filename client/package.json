@@ -1,5 +1,6 @@
 {
   "name": "cocheras-client",
+  "homepage": "https://gadiazsaavedra.github.io/sistema-cocheras",
   "version": "1.0.0",
   "private": true,
   "dependencies": {
