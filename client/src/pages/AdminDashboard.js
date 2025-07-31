@@ -17,17 +17,20 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogActions,
+  TextField,
   Box,
   Tabs,
   Tab,
   Alert
 } from '@mui/material';
-import { CheckCircle, Cancel, Print, Add, Edit, History } from '@mui/icons-material';
-import { pagosAPI, clientesAPI, reportesAPI } from '../services/api';
+import { CheckCircle, Cancel, Print, Add, Edit, History, Delete, Warning } from '@mui/icons-material';
+import { pagosFirestore, clientesFirestore, reportesFirestore } from '../services/firestore';
 import ClienteForm from '../components/ClienteForm';
 import TablaPreciosConfig from '../components/TablaPreciosConfig';
 import ReportesAvanzados from '../components/ReportesAvanzados';
 import HistorialPagos from '../components/HistorialPagos';
+import ReporteDisponibilidad from '../components/ReporteDisponibilidad';
 import { calcularEstadoCliente, getEstadoTexto } from '../utils/morosidad';
 import moment from 'moment';
 
@@ -43,31 +46,41 @@ const AdminDashboard = () => {
   const [clienteEditar, setClienteEditar] = useState(null);
   const [openHistorial, setOpenHistorial] = useState(false);
   const [clienteHistorial, setClienteHistorial] = useState(null);
+  const [clienteEliminar, setClienteEliminar] = useState(null);
+  const [confirmacionEliminar, setConfirmacionEliminar] = useState('');
+  const [openEliminarDialog, setOpenEliminarDialog] = useState(false);
 
   useEffect(() => {
     cargarDatos();
-  }, []);
+    // Solo recargar en tab de pagos pendientes
+    let interval;
+    if (tabValue === 0) {
+      interval = setInterval(cargarDatos, 5000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [tabValue]);
 
   const cargarDatos = async () => {
     try {
       // Cargar clientes siempre
-      const clientesRes = await clientesAPI.obtener();
-      setClientes(clientesRes.data);
+      const clientesRes = await clientesFirestore.obtener();
+      setClientes(clientesRes);
       
-      // Cargar pagos solo si hay clientes
-      if (clientesRes.data.length > 0) {
-        try {
-          const [pagosPendientesRes, todosPagosRes] = await Promise.all([
-            pagosAPI.obtener({ estado: 'pendiente' }),
-            pagosAPI.obtener()
-          ]);
-          setPagosPendientes(pagosPendientesRes.data);
-          setTodosLosPagos(todosPagosRes.data);
-        } catch (pagosError) {
-          console.log('No hay pagos pendientes');
-          setPagosPendientes([]);
-          setTodosLosPagos([]);
-        }
+      // Cargar pagos siempre
+      try {
+        const [pagosPendientesRes, todosPagosRes] = await Promise.all([
+          pagosFirestore.obtener({ estado: 'pendiente' }),
+          pagosFirestore.obtener()
+        ]);
+        console.log('Pagos pendientes cargados:', pagosPendientesRes.length);
+        setPagosPendientes(pagosPendientesRes);
+        setTodosLosPagos(todosPagosRes);
+      } catch (pagosError) {
+        console.error('Error cargando pagos:', pagosError);
+        setPagosPendientes([]);
+        setTodosLosPagos([]);
       }
     } catch (error) {
       console.error('Error cargando datos:', error);
@@ -76,9 +89,10 @@ const AdminDashboard = () => {
 
   const handleConfirmarPago = async (pagoId, accion) => {
     try {
-      await pagosAPI.confirmar(pagoId, accion);
+      await pagosFirestore.confirmar(pagoId, accion);
       setMensaje(`Pago ${accion === 'aprobar' ? 'aprobado' : 'rechazado'} exitosamente`);
-      cargarDatos();
+      // Recargar inmediatamente
+      setTimeout(cargarDatos, 500);
       setSelectedPago(null);
     } catch (error) {
       setMensaje('Error procesando pago');
@@ -87,10 +101,10 @@ const AdminDashboard = () => {
 
   const generarReporte = async () => {
     try {
-      const response = await reportesAPI.clientes({
+      const response = await reportesFirestore.clientes({
         periodo: moment().format('YYYY-MM')
       });
-      setReporteData(response.data);
+      setReporteData(response);
     } catch (error) {
       console.error('Error generando reporte:', error);
     }
@@ -100,10 +114,10 @@ const AdminDashboard = () => {
     try {
       console.log('Enviando cliente:', clienteData);
       if (clienteEditar) {
-        await clientesAPI.actualizar(clienteEditar.id, clienteData);
+        await clientesFirestore.actualizar(clienteEditar.id, clienteData);
         setMensaje('Cliente actualizado exitosamente');
       } else {
-        const response = await clientesAPI.crear(clienteData);
+        const response = await clientesFirestore.crear(clienteData);
         console.log('Respuesta:', response);
         setMensaje('Cliente agregado exitosamente');
       }
@@ -124,6 +138,33 @@ const AdminDashboard = () => {
   const handleVerHistorial = (cliente) => {
     setClienteHistorial(cliente);
     setOpenHistorial(true);
+  };
+
+  const handleEliminarCliente = (cliente) => {
+    setClienteEliminar(cliente);
+    setConfirmacionEliminar('');
+    setOpenEliminarDialog(true);
+  };
+
+  const confirmarEliminacion = async () => {
+    const textoConfirmacion = `${clienteEliminar.nombre} ${clienteEliminar.apellido}`;
+    
+    if (confirmacionEliminar !== textoConfirmacion) {
+      setMensaje('❌ Debe escribir el nombre completo exacto para confirmar');
+      return;
+    }
+
+    try {
+      await clientesFirestore.eliminar(clienteEliminar.id);
+      setMensaje(`✅ Cliente ${textoConfirmacion} eliminado exitosamente`);
+      cargarDatos();
+      setOpenEliminarDialog(false);
+      setClienteEliminar(null);
+      setConfirmacionEliminar('');
+    } catch (error) {
+      console.error('Error eliminando cliente:', error);
+      setMensaje('❌ Error eliminando cliente');
+    }
   };
 
   const imprimirReporte = () => {
@@ -201,6 +242,7 @@ const AdminDashboard = () => {
         <Tabs value={tabValue} onChange={(e, newValue) => setTabValue(newValue)}>
           <Tab label="Pagos Pendientes" />
           <Tab label="Gestión de Clientes" />
+          <Tab label="Disponibilidad" />
           <Tab label="Configuración de Precios" />
           <Tab label="Reportes Avanzados" />
           <Tab label="Reportes Básicos" />
@@ -352,8 +394,18 @@ const AdminDashboard = () => {
                           startIcon={<History />}
                           onClick={() => handleVerHistorial(cliente)}
                           variant="outlined"
+                          sx={{ mr: 1 }}
                         >
                           Historial
+                        </Button>
+                        <Button 
+                          size="small" 
+                          startIcon={<Delete />}
+                          onClick={() => handleEliminarCliente(cliente)}
+                          color="error"
+                          variant="outlined"
+                        >
+                          Eliminar
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -366,14 +418,18 @@ const AdminDashboard = () => {
       </TabPanel>
 
       <TabPanel value={tabValue} index={2}>
-        <TablaPreciosConfig />
+        <ReporteDisponibilidad />
       </TabPanel>
 
       <TabPanel value={tabValue} index={3}>
-        <ReportesAvanzados />
+        <TablaPreciosConfig />
       </TabPanel>
 
       <TabPanel value={tabValue} index={4}>
+        <ReportesAvanzados />
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={5}>
         <Card>
           <CardContent>
             <Typography variant="h6" gutterBottom>
@@ -451,6 +507,87 @@ const AdminDashboard = () => {
         }}
         cliente={clienteHistorial}
       />
+      
+      {/* Dialog de confirmación de eliminación */}
+      <Dialog
+        open={openEliminarDialog}
+        onClose={() => setOpenEliminarDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ bgcolor: 'error.main', color: 'white', display: 'flex', alignItems: 'center' }}>
+          <Warning sx={{ mr: 1 }} />
+          ⚠️ ELIMINAR CLIENTE - ACCIÓN IRREVERSIBLE
+        </DialogTitle>
+        <DialogContent sx={{ p: 3 }}>
+          <Alert severity="error" sx={{ mb: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              🚨 ADVERTENCIA: Esta acción NO se puede deshacer
+            </Typography>
+            <Typography variant="body2">
+              • Se eliminará permanentemente el cliente<br/>
+              • Se perderá todo su historial de pagos<br/>
+              • No podrá recuperar esta información
+            </Typography>
+          </Alert>
+          
+          {clienteEliminar && (
+            <Box sx={{ mb: 3, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
+              <Typography variant="h6" color="error">
+                Cliente a eliminar:
+              </Typography>
+              <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                {clienteEliminar.nombre} {clienteEliminar.apellido}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Teléfono: {clienteEliminar.telefono}<br/>
+                Vehículo: {clienteEliminar.tipoVehiculo}<br/>
+                Empleado: {clienteEliminar.empleadoAsignado?.split('@')[0]}
+              </Typography>
+            </Box>
+          )}
+          
+          <Typography variant="body1" gutterBottom sx={{ fontWeight: 'bold' }}>
+            Para confirmar, escriba el nombre completo exacto:
+          </Typography>
+          <Typography variant="body2" color="primary" sx={{ mb: 2, fontFamily: 'monospace', bgcolor: 'grey.100', p: 1, borderRadius: 1 }}>
+            {clienteEliminar?.nombre} {clienteEliminar?.apellido}
+          </Typography>
+          
+          <TextField
+            fullWidth
+            label="Escriba el nombre completo para confirmar"
+            value={confirmacionEliminar}
+            onChange={(e) => setConfirmacionEliminar(e.target.value)}
+            error={confirmacionEliminar && confirmacionEliminar !== `${clienteEliminar?.nombre} ${clienteEliminar?.apellido}`}
+            helperText={confirmacionEliminar && confirmacionEliminar !== `${clienteEliminar?.nombre} ${clienteEliminar?.apellido}` ? 'El nombre no coincide exactamente' : ''}
+            autoComplete="off"
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 3 }}>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={confirmarEliminacion}
+            disabled={!confirmacionEliminar || confirmacionEliminar !== `${clienteEliminar?.nombre} ${clienteEliminar?.apellido}`}
+            startIcon={<Delete />}
+            size="large"
+          >
+            🗑️ ELIMINAR PERMANENTEMENTE
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={() => {
+              setOpenEliminarDialog(false);
+              setClienteEliminar(null);
+              setConfirmacionEliminar('');
+            }}
+            size="large"
+          >
+            Cancelar
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

@@ -12,6 +12,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogActions,
   TextField,
   Select,
   MenuItem,
@@ -37,7 +38,7 @@ import {
   Person,
   Add
 } from '@mui/icons-material';
-import { clientesAPI, pagosAPI } from '../services/api';
+import { clientesFirestore, pagosFirestore } from '../services/firestore';
 import { useAuth } from '../hooks/useAuth';
 import CameraCapture from '../components/CameraCapture';
 
@@ -58,6 +59,16 @@ const EmpleadoDashboard = () => {
   const [loadingClientes, setLoadingClientes] = useState(true);
   const [mensaje, setMensaje] = useState('');
   const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [openClienteForm, setOpenClienteForm] = useState(false);
+  const [nuevoCliente, setNuevoCliente] = useState({
+    nombre: '',
+    apellido: '',
+    telefono: '',
+    tipoVehiculo: 'auto',
+    modalidadTiempo: 'diurna',
+    modalidadTecho: 'bajo_techo',
+    precio: ''
+  });
 
   useEffect(() => {
     cargarClientes();
@@ -67,8 +78,8 @@ const EmpleadoDashboard = () => {
   const cargarClientes = async () => {
     setLoadingClientes(true);
     try {
-      const response = await clientesAPI.obtener();
-      setClientes(response.data);
+      const response = await clientesFirestore.obtener();
+      setClientes(response);
     } catch (error) {
       console.error('Error cargando clientes:', error);
       setMensaje('Error cargando clientes');
@@ -134,14 +145,16 @@ const EmpleadoDashboard = () => {
 
     setLoading(true);
     try {
-      const formData = new FormData();
-      formData.append('clienteId', selectedCliente.id);
-      formData.append('monto', pagoData.monto);
-      formData.append('tipoPago', pagoData.tipoPago);
-      formData.append('ubicacion', JSON.stringify(ubicacion));
-      formData.append('comprobante', pagoData.foto);
+      const pagoDataFirestore = {
+        clienteId: selectedCliente.id,
+        clienteNombre: `${selectedCliente.nombre} ${selectedCliente.apellido}`,
+        monto: pagoData.monto,
+        tipoPago: pagoData.tipoPago,
+        ubicacion,
+        foto: pagoData.foto
+      };
 
-      await pagosAPI.crear(formData);
+      await pagosFirestore.crear(pagoDataFirestore);
       setMensaje('✅ Pago registrado exitosamente. Pendiente de confirmación.');
       setSnackbarOpen(true);
       setOpenPago(false);
@@ -159,6 +172,50 @@ const EmpleadoDashboard = () => {
       setMensaje('Error al cerrar sesión');
       setSnackbarOpen(true);
     }
+  };
+
+  const handleSaveNuevoCliente = async () => {
+    if (!nuevoCliente.nombre || !nuevoCliente.apellido || !nuevoCliente.telefono) {
+      setMensaje('Complete todos los campos obligatorios');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const clienteData = {
+        ...nuevoCliente,
+        empleadoAsignado: user.email,
+        fechaCreacion: new Date().toISOString(),
+        estado: 'activo'
+      };
+      
+      const clienteCreado = await clientesFirestore.crear(clienteData);
+      
+      // Agregar a la lista local
+      setClientes(prev => [...prev, clienteCreado]);
+      
+      setMensaje('✅ Cliente creado exitosamente');
+      setSnackbarOpen(true);
+      setOpenClienteForm(false);
+      
+      // Limpiar formulario
+      setNuevoCliente({
+        nombre: '',
+        apellido: '',
+        telefono: '',
+        tipoVehiculo: 'auto',
+        modalidadTiempo: 'diurna',
+        modalidadTecho: 'bajo_techo',
+        precio: ''
+      });
+      
+    } catch (error) {
+      console.error('Error creando cliente:', error);
+      setMensaje('❌ Error creando cliente');
+      setSnackbarOpen(true);
+    }
+    setLoading(false);
   };
 
   return (
@@ -198,11 +255,22 @@ const EmpleadoDashboard = () => {
           <Grid item xs={12}>
             <Card elevation={3}>
               <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <Payment sx={{ mr: 1, color: 'primary.main' }} />
-                  <Typography variant="h6">
-                    Clientes Asignados ({clientes.length})
-                  </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Payment sx={{ mr: 1, color: 'primary.main' }} />
+                    <Typography variant="h6">
+                      Clientes Asignados ({clientes.length})
+                    </Typography>
+                  </Box>
+                  <Button
+                    variant="contained"
+                    color="secondary"
+                    startIcon={<Add />}
+                    onClick={() => setOpenClienteForm(true)}
+                    size="small"
+                  >
+                    Nuevo Cliente
+                  </Button>
                 </Box>
                 
                 {loadingClientes ? (
@@ -225,7 +293,7 @@ const EmpleadoDashboard = () => {
                         <ListItemText
                           primary={
                             <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-                              {cliente.nombre}
+                              {cliente.nombre} {cliente.apellido}
                             </Typography>
                           }
                           secondary={
@@ -283,7 +351,7 @@ const EmpleadoDashboard = () => {
           alignItems: 'center'
         }}>
           <Payment sx={{ mr: 1 }} />
-          Registrar Pago - {selectedCliente?.nombre}
+          Registrar Pago - {selectedCliente?.nombre} {selectedCliente?.apellido}
         </DialogTitle>
         <DialogContent sx={{ p: isMobile ? 2 : 3 }}>
           <Box sx={{ pt: 2 }}>
@@ -372,6 +440,122 @@ const EmpleadoDashboard = () => {
           {mensaje}
         </Alert>
       </Snackbar>
+
+      {/* Dialog para crear nuevo cliente */}
+      <Dialog 
+        open={openClienteForm} 
+        onClose={() => setOpenClienteForm(false)} 
+        maxWidth="sm" 
+        fullWidth
+        fullScreen={isMobile}
+      >
+        <DialogTitle sx={{ bgcolor: 'secondary.main', color: 'white' }}>
+          🆕 Registrar Nuevo Cliente
+        </DialogTitle>
+        <DialogContent sx={{ p: 3 }}>
+          <Box sx={{ pt: 2 }}>
+            <TextField
+              fullWidth
+              label="Nombre *"
+              value={nuevoCliente.nombre}
+              onChange={(e) => {
+                const valor = e.target.value;
+                const nombreCapitalizado = valor.charAt(0).toUpperCase() + valor.slice(1).toLowerCase();
+                setNuevoCliente({...nuevoCliente, nombre: nombreCapitalizado});
+              }}
+              margin="normal"
+            />
+            
+            <TextField
+              fullWidth
+              label="Apellido *"
+              value={nuevoCliente.apellido}
+              onChange={(e) => {
+                const valor = e.target.value;
+                const apellidoCapitalizado = valor.charAt(0).toUpperCase() + valor.slice(1).toLowerCase();
+                setNuevoCliente({...nuevoCliente, apellido: apellidoCapitalizado});
+              }}
+              margin="normal"
+            />
+            
+            <TextField
+              fullWidth
+              label="Teléfono *"
+              value={nuevoCliente.telefono}
+              onChange={(e) => setNuevoCliente({...nuevoCliente, telefono: e.target.value})}
+              margin="normal"
+            />
+            
+            <FormControl fullWidth margin="normal">
+              <InputLabel>Tipo de Vehículo</InputLabel>
+              <Select
+                value={nuevoCliente.tipoVehiculo}
+                onChange={(e) => setNuevoCliente({...nuevoCliente, tipoVehiculo: e.target.value})}
+              >
+                <MenuItem value="moto">🏍️ Moto</MenuItem>
+                <MenuItem value="auto">🚗 Auto</MenuItem>
+                <MenuItem value="camioneta">🚙 Camioneta</MenuItem>
+                <MenuItem value="furgon">🚐 Furgón</MenuItem>
+                <MenuItem value="camion">🚚 Camión</MenuItem>
+                <MenuItem value="trailer">🚛 Trailer</MenuItem>
+              </Select>
+            </FormControl>
+            
+            <FormControl fullWidth margin="normal">
+              <InputLabel>Modalidad de Tiempo</InputLabel>
+              <Select
+                value={nuevoCliente.modalidadTiempo}
+                onChange={(e) => setNuevoCliente({...nuevoCliente, modalidadTiempo: e.target.value})}
+              >
+                <MenuItem value="diurna">☀️ Diurna (8-17hs)</MenuItem>
+                <MenuItem value="nocturna">🌙 Nocturna (17-8hs)</MenuItem>
+                <MenuItem value="24hs">🔄 24 Horas</MenuItem>
+              </Select>
+            </FormControl>
+            
+            <FormControl fullWidth margin="normal">
+              <InputLabel>Tipo de Cobertura</InputLabel>
+              <Select
+                value={nuevoCliente.modalidadTecho}
+                onChange={(e) => setNuevoCliente({...nuevoCliente, modalidadTecho: e.target.value})}
+              >
+                <MenuItem value="bajo_techo">🏠 Bajo Techo</MenuItem>
+                <MenuItem value="bajo_carpa">⛺ Bajo Carpa</MenuItem>
+              </Select>
+            </FormControl>
+            
+            <TextField
+              fullWidth
+              label="Precio Mensual ($)"
+              type="number"
+              value={nuevoCliente.precio}
+              onChange={(e) => setNuevoCliente({...nuevoCliente, precio: e.target.value})}
+              margin="normal"
+              inputProps={{ min: 0 }}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 3 }}>
+          <Button
+            variant="contained"
+            onClick={handleSaveNuevoCliente}
+            disabled={loading}
+            fullWidth
+            size="large"
+          >
+            {loading ? 'Creando...' : '✅ Crear Cliente'}
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={() => setOpenClienteForm(false)}
+            disabled={loading}
+            fullWidth
+            size="large"
+          >
+            Cancelar
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

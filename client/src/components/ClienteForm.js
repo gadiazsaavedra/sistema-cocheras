@@ -105,7 +105,11 @@ const ClienteForm = ({ open, onClose, onSave, cliente = null }) => {
                 fullWidth
                 label="Nombre"
                 value={formData.nombre}
-                onChange={(e) => handleChange('nombre', e.target.value)}
+                onChange={(e) => {
+                  const valor = e.target.value;
+                  const nombreCapitalizado = valor.charAt(0).toUpperCase() + valor.slice(1).toLowerCase();
+                  handleChange('nombre', nombreCapitalizado);
+                }}
                 required
               />
             </Grid>
@@ -115,7 +119,11 @@ const ClienteForm = ({ open, onClose, onSave, cliente = null }) => {
                 fullWidth
                 label="Apellido"
                 value={formData.apellido}
-                onChange={(e) => handleChange('apellido', e.target.value)}
+                onChange={(e) => {
+                  const valor = e.target.value;
+                  const apellidoCapitalizado = valor.charAt(0).toUpperCase() + valor.slice(1).toLowerCase();
+                  handleChange('apellido', apellidoCapitalizado);
+                }}
                 required
               />
             </Grid>
