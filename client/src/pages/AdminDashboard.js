@@ -239,7 +239,10 @@ const AdminDashboard = () => {
                       </TableCell>
                       <TableCell>{pago.empleadoNombre}</TableCell>
                       <TableCell>
-                        {moment(pago.fechaRegistro?.toDate()).format('DD/MM/YYYY HH:mm')}
+                        {pago.fechaRegistro ? 
+                          moment(pago.fechaRegistro).format('DD/MM/YYYY HH:mm') :
+                          'Sin fecha'
+                        }
                       </TableCell>
                       <TableCell>
                         <Button

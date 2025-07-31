@@ -7,9 +7,31 @@ export const useAuth = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Recuperar usuario guardado
+    const savedUser = localStorage.getItem('cocheras_user');
+    if (savedUser) {
+      try {
+        const userData = JSON.parse(savedUser);
+        setUser(userData);
+      } catch (error) {
+        localStorage.removeItem('cocheras_user');
+      }
+    }
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
       setLoading(false);
+      
+      // Guardar/limpiar usuario en localStorage
+      if (user) {
+        localStorage.setItem('cocheras_user', JSON.stringify({
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName
+        }));
+      } else {
+        localStorage.removeItem('cocheras_user');
+      }
     });
 
     return unsubscribe;
@@ -17,19 +39,26 @@ export const useAuth = () => {
 
   const login = async (email, password) => {
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      return { success: true };
+      const result = await signInWithEmailAndPassword(auth, email, password);
+      return { success: true, user: result.user };
     } catch (error) {
-      return { success: false, error: error.message };
+      let errorMessage = 'Error de conexión';
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+        errorMessage = 'Credenciales incorrectas';
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = 'Demasiados intentos. Intenta más tarde';
+      }
+      return { success: false, error: errorMessage };
     }
   };
 
   const logout = async () => {
     try {
       await signOut(auth);
+      localStorage.removeItem('cocheras_user');
       return { success: true };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: 'Error al cerrar sesión' };
     }
   };
 

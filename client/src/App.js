@@ -1,7 +1,16 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { CssBaseline, AppBar, Toolbar, Typography, Button, Box } from '@mui/material';
+import { 
+  CssBaseline, 
+  AppBar, 
+  Toolbar, 
+  Typography, 
+  Button, 
+  Box,
+  CircularProgress,
+  useMediaQuery
+} from '@mui/material';
 import { useAuth } from './hooks/useAuth';
 import Login from './components/Login';
 import AdminDashboard from './pages/AdminDashboard';
@@ -16,12 +25,35 @@ const theme = createTheme({
       main: '#dc004e',
     },
   },
+  breakpoints: {
+    values: {
+      xs: 0,
+      sm: 600,
+      md: 900,
+      lg: 1200,
+      xl: 1536,
+    },
+  },
 });
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, role, loading } = useAuth();
   
-  if (loading) return <div>Cargando...</div>;
+  if (loading) {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        flexDirection: 'column'
+      }}>
+        <CircularProgress size={60} />
+        <Typography sx={{ mt: 2 }}>Cargando...</Typography>
+      </Box>
+    );
+  }
+  
   if (!user) return <Navigate to="/login" />;
   if (allowedRoles && !allowedRoles.includes(role)) {
     return <Navigate to="/unauthorized" />;
@@ -32,26 +64,46 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 
 const AppLayout = ({ children }) => {
   const { user, logout, role } = useAuth();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
   const handleLogout = async () => {
     await logout();
   };
 
+  // Para empleados, no mostrar AppBar porque ya tienen su propio header
+  if (role === 'empleado') {
+    return <main>{children}</main>;
+  }
+
   return (
     <>
       <AppBar position="static">
         <Toolbar>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            Sistema de Cocheras - {role === 'admin' ? 'Administrador' : 
-                                   role === 'co-admin' ? 'Co-Administrador' : 'Empleado'}
+          <Typography 
+            variant={isMobile ? 'body1' : 'h6'} 
+            component="div" 
+            sx={{ flexGrow: 1 }}
+          >
+            🏠 Sistema de Cocheras
+            {!isMobile && (
+              <Typography component="span" sx={{ ml: 1, opacity: 0.8 }}>
+                - {role === 'admin' ? 'Administrador' : 'Co-Administrador'}
+              </Typography>
+            )}
           </Typography>
           {user && (
-            <Box>
-              <Typography variant="body2" sx={{ mr: 2, display: 'inline' }}>
-                {user.email}
-              </Typography>
-              <Button color="inherit" onClick={handleLogout}>
-                Cerrar Sesión
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              {!isMobile && (
+                <Typography variant="body2" sx={{ mr: 2 }}>
+                  {user.email}
+                </Typography>
+              )}
+              <Button 
+                color="inherit" 
+                onClick={handleLogout}
+                size={isMobile ? 'small' : 'medium'}
+              >
+                {isMobile ? 'Salir' : 'Cerrar Sesión'}
               </Button>
             </Box>
           )}
@@ -68,7 +120,21 @@ function App() {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return <div>Cargando aplicación...</div>;
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          height: '100vh',
+          flexDirection: 'column'
+        }}>
+          <CircularProgress size={60} />
+          <Typography sx={{ mt: 2 }}>Cargando aplicación...</Typography>
+        </Box>
+      </ThemeProvider>
+    );
   }
 
   return (

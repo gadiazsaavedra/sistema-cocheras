@@ -13,7 +13,7 @@ export const calcularEstadoCliente = (cliente, pagos = []) => {
   const pagoReciente = pagos.find(pago => 
     pago.clienteId === cliente.id && 
     pago.estado === 'confirmado' &&
-    moment(pago.fechaRegistro.toDate()).isAfter(fechaVencimiento.subtract(5, 'days'))
+    moment(pago.fechaRegistro).isAfter(fechaVencimiento.subtract(5, 'days'))
   );
 
   if (pagoReciente) {

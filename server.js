@@ -9,6 +9,7 @@ const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const https = require('https');
 
 // Configuración Firebase Admin (solo Firestore - GRATUITO)
 const serviceAccount = require('./firebase-service-account.json');
@@ -23,7 +24,10 @@ if (!fs.existsSync('./uploads')) {
   fs.mkdirSync('./uploads');
 }
 
-app.use(cors());
+app.use(cors({
+  origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : true,
+  credentials: true
+}));
 app.use(express.json());
 app.use(express.static('client/build'));
 app.use('/uploads', express.static('uploads')); // Servir fotos locales
@@ -125,7 +129,16 @@ app.get('/api/pagos', authenticateToken, async (req, res) => {
     }
     
     const snapshot = await query.get();
-    const pagos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const pagos = snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        // Convertir timestamps de Firestore a formato serializable
+        fechaRegistro: data.fechaRegistro ? data.fechaRegistro.toDate().toISOString() : null,
+        fechaConfirmacion: data.fechaConfirmacion ? data.fechaConfirmacion.toDate().toISOString() : null
+      };
+    });
     res.json(pagos);
   } catch (error) {
     console.error('Error en /api/pagos:', error);
@@ -270,6 +283,8 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Servidor ejecutándose en puerto ${PORT}`);
+  console.log(`Acceso local: http://localhost:${PORT}`);
+  console.log(`Acceso red: http://[TU_IP]:${PORT}`);
 });

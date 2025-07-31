@@ -1,7 +1,29 @@
 import axios from 'axios';
 import { auth } from './firebase';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000/api';
+// Detectar si estamos en desarrollo local o producción
+const getApiUrl = () => {
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  
+  // Producción: Firebase Functions
+  if (window.location.hostname.includes('github.io') || window.location.hostname.includes('web.app')) {
+    return 'https://us-central1-sistema-cocheras.cloudfunctions.net/api';
+  }
+  
+  // Desarrollo local
+  if (window.location.hostname === 'localhost') {
+    return 'http://localhost:3000/api';
+  }
+  
+  // Red local
+  return `http://${window.location.hostname}:3000/api`;
+};
+
+const API_BASE_URL = getApiUrl();
+
+console.log('API URL configurada:', API_BASE_URL);
 
 const api = axios.create({
   baseURL: API_BASE_URL,
