@@ -7,9 +7,11 @@ const getApiUrl = () => {
     return process.env.REACT_APP_API_URL;
   }
   
-  // Producción: Firebase Functions
-  if (window.location.hostname.includes('github.io') || window.location.hostname.includes('web.app')) {
-    return 'https://us-central1-sistema-cocheras.cloudfunctions.net/api';
+  // Producción: Render backend
+  if (window.location.hostname.includes('netlify.app') || 
+      window.location.hostname.includes('github.io') || 
+      window.location.hostname.includes('web.app')) {
+    return 'https://sistema-cocheras-backend.onrender.com/api';
   }
   
   // Desarrollo local

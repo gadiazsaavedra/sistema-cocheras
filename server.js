@@ -8,7 +8,7 @@ const path = require('path');
 const fs = require('fs');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 const https = require('https');
 
 // Configuración Firebase Admin (solo Firestore - GRATUITO)
@@ -25,7 +25,9 @@ if (!fs.existsSync('./uploads')) {
 }
 
 app.use(cors({
-  origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : true,
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://spiffy-flan-5a5eba.netlify.app', 'https://sistema-cocheras-backend.onrender.com']
+    : true,
   credentials: true
 }));
 app.use(express.json());
@@ -326,6 +328,11 @@ function generarMensaje(tipo, cliente) {
   return mensajes[tipo];
 }
 
+// Health check para Render
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
 // Servir la aplicación React
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
@@ -333,6 +340,10 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Servidor ejecutándose en puerto ${PORT}`);
-  console.log(`Acceso local: http://localhost:${PORT}`);
-  console.log(`Acceso red: http://[TU_IP]:${PORT}`);
+  if (process.env.NODE_ENV === 'production') {
+    console.log(`Servidor en producción: https://sistema-cocheras-backend.onrender.com`);
+  } else {
+    console.log(`Acceso local: http://localhost:${PORT}`);
+    console.log(`Acceso red: http://[TU_IP]:${PORT}`);
+  }
 });

@@ -557,7 +557,15 @@ const AdminDashboard = () => {
                         
                         const token = await user.getIdToken();
                         
-                        const response = await fetch('http://localhost:3000/api/admin/limpiar-historial', {
+                        // Usar la misma lógica de detección de API
+                        const getApiUrl = () => {
+                          if (window.location.hostname.includes('netlify.app')) {
+                            return 'https://sistema-cocheras-backend.onrender.com/api';
+                          }
+                          return 'http://localhost:3000/api';
+                        };
+                        
+                        const response = await fetch(`${getApiUrl()}/admin/limpiar-historial`, {
                           method: 'DELETE',
                           headers: { 
                             'Content-Type': 'application/json',
