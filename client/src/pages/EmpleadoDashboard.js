@@ -74,6 +74,7 @@ const EmpleadoDashboard = () => {
     modalidadTecho: 'bajo_techo',
     precio: ''
   });
+  const [busquedaCliente, setBusquedaCliente] = useState('');
 
   useEffect(() => {
     cargarClientes();
@@ -430,8 +431,50 @@ const EmpleadoDashboard = () => {
                     <CircularProgress />
                   </Box>
                 ) : (
-                  <List sx={{ maxHeight: isMobile ? 400 : 500, overflow: 'auto' }}>
-                    {clientes.map((cliente) => {
+                  <>
+                  {/* Barra de búsqueda */}
+                  <Box sx={{ mb: 2 }}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    placeholder="🔍 Buscar cliente por nombre, teléfono o vehículo..."
+                    value={busquedaCliente}
+                    onChange={(e) => setBusquedaCliente(e.target.value)}
+                    sx={{ 
+                      bgcolor: 'white',
+                      borderRadius: 2,
+                      '& .MuiOutlinedInput-root': {
+                        borderRadius: 2
+                      }
+                    }}
+                  />
+                  {busquedaCliente && (
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                      {(() => {
+                        const filtrados = clientes.filter(cliente => 
+                          `${cliente.nombre} ${cliente.apellido}`.toLowerCase().includes(busquedaCliente.toLowerCase()) ||
+                          cliente.telefono?.includes(busquedaCliente) ||
+                          cliente.tipoVehiculo?.toLowerCase().includes(busquedaCliente.toLowerCase())
+                        );
+                        return `${filtrados.length} de ${clientes.length} clientes`;
+                      })()
+                      }
+                    </Typography>
+                  )}
+                </Box>
+                
+                <List sx={{ maxHeight: isMobile ? 400 : 500, overflow: 'auto' }}>
+                    {clientes
+                      .filter(cliente => {
+                        if (!busquedaCliente.trim()) return true;
+                        const busqueda = busquedaCliente.toLowerCase();
+                        return (
+                          `${cliente.nombre} ${cliente.apellido}`.toLowerCase().includes(busqueda) ||
+                          cliente.telefono?.includes(busqueda) ||
+                          cliente.tipoVehiculo?.toLowerCase().includes(busqueda)
+                        );
+                      })
+                      .map((cliente) => {
                       const estadoMorosidad = calcularEstadoCliente(cliente, todosLosPagos);
                       const esMoroso = estadoMorosidad.estado === 'moroso' || estadoMorosidad.estado === 'vencido';
                       
@@ -506,7 +549,28 @@ const EmpleadoDashboard = () => {
                       </ListItem>
                       );
                     })}
+                    
+                    {/* Mensaje cuando no hay resultados */}
+                    {busquedaCliente && clientes.filter(cliente => {
+                      const busqueda = busquedaCliente.toLowerCase();
+                      return (
+                        `${cliente.nombre} ${cliente.apellido}`.toLowerCase().includes(busqueda) ||
+                        cliente.telefono?.includes(busqueda) ||
+                        cliente.tipoVehiculo?.toLowerCase().includes(busqueda)
+                      );
+                    }).length === 0 && (
+                      <ListItem>
+                        <ListItemText
+                          primary={
+                            <Typography variant="body1" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
+                              🔍 No se encontraron clientes con "{busquedaCliente}"
+                            </Typography>
+                          }
+                        />
+                      </ListItem>
+                    )}
                   </List>
+                  </>
                 )}
               </CardContent>
             </Card>
