@@ -1,20 +1,20 @@
 {
   "name": "cocheras-client",
-  "homepage": "https://gadiazsaavedra.github.io/sistema-cocheras",
   "version": "1.0.0",
   "private": true,
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-router-dom": "^6.8.1",
-    "firebase": "^10.5.0",
-    "axios": "^1.6.0",
-    "moment": "^2.29.4",
-    "@mui/material": "^5.14.18",
-    "@mui/icons-material": "^5.14.18",
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
-    "react-camera-pro": "^1.4.0"
+    "@mui/icons-material": "^5.14.18",
+    "@mui/material": "^5.14.18",
+    "axios": "^1.6.0",
+    "firebase": "^10.5.0",
+    "moment": "^2.29.4",
+    "react": "^18.2.0",
+    "react-camera-pro": "^1.4.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.8.1",
+    "xlsx": "^0.18.5"
   },
   "scripts": {
     "start": "react-scripts start",

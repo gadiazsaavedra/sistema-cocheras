@@ -22,15 +22,24 @@ import {
   Box,
   Tabs,
   Tab,
-  Alert
+  Alert,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem
 } from '@mui/material';
-import { CheckCircle, Cancel, Print, Add, Edit, History, Delete, Warning } from '@mui/icons-material';
+import { CheckCircle, Cancel, Print, Add, Edit, History, Delete, Warning, Visibility, PhotoCamera, Payment, Upload } from '@mui/icons-material';
+import { CircularProgress } from '@mui/material';
 import { pagosFirestore, clientesFirestore, reportesFirestore } from '../services/firestore';
 import ClienteForm from '../components/ClienteForm';
 import TablaPreciosConfig from '../components/TablaPreciosConfig';
 import ReportesAvanzados from '../components/ReportesAvanzados';
 import HistorialPagos from '../components/HistorialPagos';
 import ReporteDisponibilidad from '../components/ReporteDisponibilidad';
+import PagosSinIdentificar from '../components/PagosSinIdentificar';
+import AlertaDuplicados from '../components/AlertaDuplicados';
+import ImportarClientes from '../components/ImportarClientes';
+// import { limpiarClientesPrueba } from '../utils/limpiarDatosPrueba'; // Removido
 import { calcularEstadoCliente, getEstadoTexto } from '../utils/morosidad';
 import moment from 'moment';
 
@@ -49,6 +58,27 @@ const AdminDashboard = () => {
   const [clienteEliminar, setClienteEliminar] = useState(null);
   const [confirmacionEliminar, setConfirmacionEliminar] = useState('');
   const [openEliminarDialog, setOpenEliminarDialog] = useState(false);
+  const [pagoDetalle, setPagoDetalle] = useState(null);
+  const [openPagoDetalle, setOpenPagoDetalle] = useState(false);
+  const [clientePagoDirecto, setClientePagoDirecto] = useState(null);
+  const [openPagoDirecto, setOpenPagoDirecto] = useState(false);
+  const [openImportarClientes, setOpenImportarClientes] = useState(false);
+  const [pagoDirectoData, setPagoDirectoData] = useState({
+    monto: '',
+    tipoPago: 'efectivo',
+    observaciones: ''
+  });
+  const [alertaDuplicados, setAlertaDuplicados] = useState({
+    open: false,
+    cliente: null,
+    monto: '',
+    duplicados: {},
+    onConfirm: null
+  });
+  const [loading, setLoading] = useState(false);
+  const [filtroOrden, setFiltroOrden] = useState('nombre');
+  const [busquedaCliente, setBusquedaCliente] = useState('');
+  const [loadingHistorial, setLoadingHistorial] = useState(false);
 
   useEffect(() => {
     cargarDatos();
@@ -91,8 +121,13 @@ const AdminDashboard = () => {
     try {
       await pagosFirestore.confirmar(pagoId, accion);
       setMensaje(`Pago ${accion === 'aprobar' ? 'aprobado' : 'rechazado'} exitosamente`);
-      // Recargar inmediatamente
-      setTimeout(cargarDatos, 500);
+      
+      // Recargar datos inmediatamente
+      await cargarDatos();
+      
+      // Recargar nuevamente después de 2 segundos para asegurar actualización
+      setTimeout(cargarDatos, 2000);
+      
       setSelectedPago(null);
     } catch (error) {
       setMensaje('Error procesando pago');
@@ -121,7 +156,10 @@ const AdminDashboard = () => {
         console.log('Respuesta:', response);
         setMensaje('Cliente agregado exitosamente');
       }
-      cargarDatos();
+      
+      // Recargar datos inmediatamente
+      await cargarDatos();
+      
       setClienteEditar(null);
     } catch (error) {
       console.error('Error completo:', error);
@@ -165,6 +203,147 @@ const AdminDashboard = () => {
       console.error('Error eliminando cliente:', error);
       setMensaje('❌ Error eliminando cliente');
     }
+  };
+  
+  const verificarYRegistrarPago = async (clienteData, montoData, onConfirmCallback) => {
+    try {
+      const duplicados = await pagosFirestore.verificarDuplicados(
+        clienteData.id, 
+        montoData, 
+        new Date()
+      );
+      
+      // Si hay pagos del mismo día, mostrar alerta bloqueante
+      if (duplicados.pagosHoy.length > 0 || 
+          duplicados.pagosRecientes.length > 0 || 
+          duplicados.pagosMismoMonto.length > 0) {
+        
+        setAlertaDuplicados({
+          open: true,
+          cliente: clienteData,
+          monto: montoData,
+          duplicados,
+          onConfirm: onConfirmCallback
+        });
+        return false; // No continuar con el registro
+      }
+      
+      // Si no hay duplicados, continuar
+      return true;
+    } catch (error) {
+      console.error('Error verificando duplicados:', error);
+      return true; // En caso de error, permitir continuar
+    }
+  };
+  
+  const handlePagoDirecto = async (forzarRegistro = false) => {
+    if (!pagoDirectoData.monto || parseFloat(pagoDirectoData.monto) <= 0) {
+      setMensaje('❌ Ingrese un monto válido');
+      return;
+    }
+    
+    // Verificar duplicados solo si no es un registro forzado
+    if (!forzarRegistro) {
+      const puedeRegistrar = await verificarYRegistrarPago(
+        clientePagoDirecto,
+        pagoDirectoData.monto,
+        () => handlePagoDirecto(true) // Callback para forzar registro
+      );
+      
+      if (!puedeRegistrar) return; // Mostrar alerta, no continuar
+    }
+    
+    setLoading(true);
+    try {
+      const pagoData = {
+        clienteId: clientePagoDirecto.id,
+        clienteNombre: `${clientePagoDirecto.nombre} ${clientePagoDirecto.apellido}`,
+        monto: parseFloat(pagoDirectoData.monto),
+        tipoPago: pagoDirectoData.tipoPago,
+        observaciones: pagoDirectoData.observaciones,
+        ubicacion: { lat: 0, lng: 0 },
+        fotoBase64: null,
+        empleadoId: 'admin',
+        empleadoNombre: 'ADMIN - Pago Directo',
+        fechaRegistro: new Date().toISOString(),
+        estado: 'confirmado',
+        fechaConfirmacion: new Date().toISOString(),
+        confirmadoPor: 'admin',
+        tipoRegistro: 'pago_directo'
+      };
+      
+      await pagosFirestore.crear(pagoData);
+      
+      setMensaje('✅ Pago directo registrado y aprobado exitosamente');
+      setOpenPagoDirecto(false);
+      setClientePagoDirecto(null);
+      setPagoDirectoData({ monto: '', tipoPago: 'efectivo', observaciones: '' });
+      setAlertaDuplicados({ open: false, cliente: null, monto: '', duplicados: {}, onConfirm: null });
+      
+      // Recargar datos inmediatamente
+      await cargarDatos();
+      
+      // Recargar nuevamente después de 2 segundos
+      setTimeout(cargarDatos, 2000);
+      
+    } catch (error) {
+      console.error('Error registrando pago directo:', error);
+      setMensaje('❌ Error registrando pago directo');
+    }
+    setLoading(false);
+  };
+  
+  // Función para filtrar y ordenar clientes
+  const getClientesFiltrados = () => {
+    let clientesFiltrados = [...clientes];
+    
+    // Aplicar búsqueda
+    if (busquedaCliente.trim()) {
+      const busqueda = busquedaCliente.toLowerCase();
+      clientesFiltrados = clientesFiltrados.filter(cliente => 
+        `${cliente.nombre} ${cliente.apellido}`.toLowerCase().includes(busqueda) ||
+        cliente.telefono?.includes(busqueda) ||
+        cliente.tipoVehiculo?.toLowerCase().includes(busqueda)
+      );
+    }
+    
+    // Calcular estado de morosidad para cada cliente
+    clientesFiltrados = clientesFiltrados.map(cliente => ({
+      ...cliente,
+      estadoMorosidad: calcularEstadoCliente(cliente, todosLosPagos)
+    }));
+    
+    // Aplicar ordenamiento
+    clientesFiltrados.sort((a, b) => {
+      // Prioridad: morosos primero, luego por vencer, luego al día
+      const prioridadEstado = { moroso: 0, vencido: 1, por_vencer: 2, al_dia: 3, sin_fecha: 4 };
+      const prioridadA = prioridadEstado[a.estadoMorosidad.estado] || 5;
+      const prioridadB = prioridadEstado[b.estadoMorosidad.estado] || 5;
+      
+      if (prioridadA !== prioridadB) {
+        return prioridadA - prioridadB;
+      }
+      
+      // Si tienen el mismo estado, aplicar ordenamiento secundario
+      switch (filtroOrden) {
+        case 'nombre':
+          return `${a.nombre} ${a.apellido}`.localeCompare(`${b.nombre} ${b.apellido}`);
+        case 'apellido':
+          return (a.apellido || '').localeCompare(b.apellido || '');
+        case 'telefono':
+          return (a.telefono || '').localeCompare(b.telefono || '');
+        case 'vehiculo':
+          return (a.tipoVehiculo || '').localeCompare(b.tipoVehiculo || '');
+        case 'precio':
+          return (b.precio || 0) - (a.precio || 0);
+        case 'vencimiento':
+          return new Date(a.fechaProximoVencimiento || 0) - new Date(b.fechaProximoVencimiento || 0);
+        default:
+          return 0;
+      }
+    });
+    
+    return clientesFiltrados;
   };
 
   const imprimirReporte = () => {
@@ -242,6 +421,7 @@ const AdminDashboard = () => {
         <Tabs value={tabValue} onChange={(e, newValue) => setTabValue(newValue)}>
           <Tab label="Pagos Pendientes" />
           <Tab label="Gestión de Clientes" />
+          <Tab label="Pagos Sin Identificar" />
           <Tab label="Disponibilidad" />
           <Tab label="Configuración de Precios" />
           <Tab label="Reportes Avanzados" />
@@ -289,6 +469,18 @@ const AdminDashboard = () => {
                       <TableCell>
                         <Button
                           size="small"
+                          startIcon={<Visibility />}
+                          variant="outlined"
+                          onClick={() => {
+                            setPagoDetalle(pago);
+                            setOpenPagoDetalle(true);
+                          }}
+                          sx={{ mr: 1 }}
+                        >
+                          Ver Detalle
+                        </Button>
+                        <Button
+                          size="small"
                           startIcon={<CheckCircle />}
                           color="success"
                           onClick={() => handleConfirmarPago(pago.id, 'aprobar')}
@@ -318,22 +510,141 @@ const AdminDashboard = () => {
         <Card>
           <CardContent>
             <Typography variant="h6" gutterBottom>
-              Gestión de Clientes ({clientes.length})
+              Gestión de Clientes ({getClientesFiltrados().length}/{clientes.length})
             </Typography>
-            <Box sx={{ mb: 2, display: 'flex', gap: 2 }}>
-              <Button 
-                variant="contained" 
-                startIcon={<Add />}
-                onClick={() => setOpenClienteForm(true)}
-              >
-                Agregar Cliente
-              </Button>
-              <Button 
-                variant="outlined"
-                onClick={cargarDatos}
-              >
-                Recargar
-              </Button>
+            <Box sx={{ mb: 3 }}>
+              {/* Botones principales */}
+              <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                <Button 
+                  variant="contained" 
+                  startIcon={<Add />}
+                  onClick={() => setOpenClienteForm(true)}
+                >
+                  Agregar Cliente
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={<Upload />}
+                  onClick={() => setOpenImportarClientes(true)}
+                  color="secondary"
+                >
+                  📊 Importar desde Excel
+                </Button>
+                <Button 
+                  variant="outlined"
+                  onClick={cargarDatos}
+                >
+                  Recargar
+                </Button>
+                <Button
+                  variant="outlined"
+                  color="warning"
+                  onClick={async () => {
+                    if (window.confirm('⚠️ ¿Eliminar TODO el historial de pagos? Esta acción NO se puede deshacer.\n\nEsto eliminará:\n- Todos los pagos registrados\n- Historial de todos los clientes\n- Estados de morosidad se resetearán')) {
+                      try {
+                        setLoading(true);
+                        
+                        // Obtener token de Firebase Auth
+                        const { getAuth } = await import('firebase/auth');
+                        const auth = getAuth();
+                        const user = auth.currentUser;
+                        
+                        if (!user) {
+                          setMensaje('❌ Error: No hay sesión activa');
+                          setLoading(false);
+                          return;
+                        }
+                        
+                        const token = await user.getIdToken();
+                        
+                        const response = await fetch('http://localhost:3000/api/admin/limpiar-historial', {
+                          method: 'DELETE',
+                          headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                          }
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (response.ok) {
+                          setMensaje('✅ Historial de pagos eliminado exitosamente');
+                          // Recargar datos inmediatamente
+                          await cargarDatos();
+                          // Recargar nuevamente después de 1 segundo
+                          setTimeout(cargarDatos, 1000);
+                        } else {
+                          setMensaje(`❌ Error: ${result.error || 'Error eliminando historial'}`);
+                        }
+                      } catch (error) {
+                        console.error('Error limpiando historial:', error);
+                        setMensaje('❌ Error de conexión eliminando historial');
+                      }
+                      setLoading(false);
+                    }
+                  }}
+                  disabled={loading}
+                >
+                  {loading ? 'Limpiando...' : '🗑️ Limpiar Historial'}
+                </Button>
+              </Box>
+              
+              {/* Filtros y búsqueda */}
+              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                <TextField
+                  size="small"
+                  placeholder="Buscar cliente..."
+                  value={busquedaCliente}
+                  onChange={(e) => setBusquedaCliente(e.target.value)}
+                  sx={{ minWidth: 200 }}
+                  InputProps={{
+                    startAdornment: <Typography sx={{ mr: 1 }}>🔍</Typography>
+                  }}
+                />
+                
+                <FormControl size="small" sx={{ minWidth: 150 }}>
+                  <InputLabel>Ordenar por</InputLabel>
+                  <Select
+                    value={filtroOrden}
+                    onChange={(e) => setFiltroOrden(e.target.value)}
+                    label="Ordenar por"
+                  >
+                    <MenuItem value="nombre">Nombre</MenuItem>
+                    <MenuItem value="apellido">Apellido</MenuItem>
+                    <MenuItem value="telefono">Teléfono</MenuItem>
+                    <MenuItem value="vehiculo">Vehículo</MenuItem>
+                    <MenuItem value="precio">Precio (Mayor a Menor)</MenuItem>
+                    <MenuItem value="vencimiento">Próximo Vencimiento</MenuItem>
+                  </Select>
+                </FormControl>
+                
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                  <Typography variant="body2" color="text.secondary">
+                    {getClientesFiltrados().length} de {clientes.length} clientes
+                  </Typography>
+                  {(() => {
+                    const clientesFiltrados = getClientesFiltrados();
+                    const morosos = clientesFiltrados.filter(c => c.estadoMorosidad.estado === 'moroso').length;
+                    const vencidos = clientesFiltrados.filter(c => c.estadoMorosidad.estado === 'vencido').length;
+                    const porVencer = clientesFiltrados.filter(c => c.estadoMorosidad.estado === 'por_vencer').length;
+                    
+                    return (
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        {morosos > 0 && (
+                          <Chip label={`${morosos} Morosos`} color="error" size="small" />
+                        )}
+                        {vencidos > 0 && (
+                          <Chip label={`${vencidos} Vencidos`} color="warning" size="small" />
+                        )}
+                        {porVencer > 0 && (
+                          <Chip label={`${porVencer} Por vencer`} color="warning" size="small" variant="outlined" />
+                        )}
+                      </Box>
+                    );
+                  })()
+                  }
+                </Box>
+              </Box>
             </Box>
             <TableContainer component={Paper}>
               <Table>
@@ -350,8 +661,24 @@ const AdminDashboard = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {clientes.map((cliente) => (
-                    <TableRow key={cliente.id}>
+                  {getClientesFiltrados().map((cliente) => (
+                    <TableRow 
+                      key={cliente.id}
+                      sx={{
+                        backgroundColor: 
+                          cliente.estadoMorosidad.estado === 'moroso' ? 'rgba(244, 67, 54, 0.1)' :
+                          cliente.estadoMorosidad.estado === 'vencido' ? 'rgba(255, 152, 0, 0.1)' :
+                          cliente.estadoMorosidad.estado === 'por_vencer' ? 'rgba(255, 193, 7, 0.1)' :
+                          'inherit',
+                        '&:hover': {
+                          backgroundColor: 
+                            cliente.estadoMorosidad.estado === 'moroso' ? 'rgba(244, 67, 54, 0.2)' :
+                            cliente.estadoMorosidad.estado === 'vencido' ? 'rgba(255, 152, 0, 0.2)' :
+                            cliente.estadoMorosidad.estado === 'por_vencer' ? 'rgba(255, 193, 7, 0.2)' :
+                            'rgba(0, 0, 0, 0.04)'
+                        }
+                      }}
+                    >
                       <TableCell>{cliente.nombre} {cliente.apellido}</TableCell>
                       <TableCell>{cliente.telefono}</TableCell>
                       <TableCell>{cliente.tipoVehiculo}</TableCell>
@@ -369,16 +696,22 @@ const AdminDashboard = () => {
                         }
                       </TableCell>
                       <TableCell>
-                        {(() => {
-                          const estadoInfo = calcularEstadoCliente(cliente, todosLosPagos);
-                          return (
-                            <Chip 
-                              label={getEstadoTexto(estadoInfo)}
-                              color={estadoInfo.color}
-                              size="small"
-                            />
-                          );
-                        })()}
+                        <Chip 
+                          label={getEstadoTexto(cliente.estadoMorosidad)}
+                          color={cliente.estadoMorosidad.color}
+                          size="small"
+                          sx={{
+                            fontWeight: 'bold',
+                            ...(cliente.estadoMorosidad.estado === 'moroso' && {
+                              animation: 'pulse 2s infinite',
+                              '@keyframes pulse': {
+                                '0%': { opacity: 1 },
+                                '50%': { opacity: 0.7 },
+                                '100%': { opacity: 1 }
+                              }
+                            })
+                          }}
+                        />
                       </TableCell>
                       <TableCell>
                         <Button 
@@ -388,6 +721,20 @@ const AdminDashboard = () => {
                           sx={{ mr: 1 }}
                         >
                           Editar
+                        </Button>
+                        <Button 
+                          size="small" 
+                          startIcon={<Payment />}
+                          onClick={() => {
+                            setClientePagoDirecto(cliente);
+                            setPagoDirectoData({ monto: '', tipoPago: 'efectivo', observaciones: '' });
+                            setOpenPagoDirecto(true);
+                          }}
+                          color="success"
+                          variant="contained"
+                          sx={{ mr: 1 }}
+                        >
+                          Pago Directo
                         </Button>
                         <Button 
                           size="small" 
@@ -418,18 +765,22 @@ const AdminDashboard = () => {
       </TabPanel>
 
       <TabPanel value={tabValue} index={2}>
-        <ReporteDisponibilidad />
+        <PagosSinIdentificar />
       </TabPanel>
 
       <TabPanel value={tabValue} index={3}>
-        <TablaPreciosConfig />
+        <ReporteDisponibilidad />
       </TabPanel>
 
       <TabPanel value={tabValue} index={4}>
-        <ReportesAvanzados />
+        <TablaPreciosConfig />
       </TabPanel>
 
       <TabPanel value={tabValue} index={5}>
+        <ReportesAvanzados />
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={6}>
         <Card>
           <CardContent>
             <Typography variant="h6" gutterBottom>
@@ -588,6 +939,327 @@ const AdminDashboard = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      
+      {/* Dialog para ver detalle del pago */}
+      <Dialog
+        open={openPagoDetalle}
+        onClose={() => {
+          setOpenPagoDetalle(false);
+          setPagoDetalle(null);
+        }}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white', display: 'flex', alignItems: 'center' }}>
+          <Visibility sx={{ mr: 1 }} />
+          📝 Detalle del Pago - {pagoDetalle?.clienteNombre}
+        </DialogTitle>
+        <DialogContent sx={{ p: 3 }}>
+          {pagoDetalle && (
+            <Box>
+              {/* Información del pago */}
+              <Box sx={{ mb: 3, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                <Typography variant="h6" gutterBottom color="primary">
+                  💰 Información del Pago
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="text.secondary">Cliente:</Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                      {pagoDetalle.clienteNombre}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="text.secondary">Monto:</Typography>
+                    <Typography variant="h6" color="success.main">
+                      ${pagoDetalle.monto?.toLocaleString()}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="text.secondary">Tipo de Pago:</Typography>
+                    <Chip 
+                      label={pagoDetalle.tipoPago} 
+                      size="small" 
+                      color={pagoDetalle.tipoPago === 'efectivo' ? 'primary' : 'secondary'}
+                    />
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="text.secondary">Empleado:</Typography>
+                    <Typography variant="body1">
+                      {pagoDetalle.empleadoNombre?.split('@')[0]?.charAt(0).toUpperCase() + 
+                       pagoDetalle.empleadoNombre?.split('@')[0]?.slice(1) || 'N/A'}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Typography variant="body2" color="text.secondary">Fecha de Registro:</Typography>
+                    <Typography variant="body1">
+                      {pagoDetalle.fechaRegistro ? 
+                        moment(pagoDetalle.fechaRegistro).format('DD/MM/YYYY HH:mm:ss') :
+                        'Sin fecha'
+                      }
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Box>
+              
+              {/* Foto del comprobante */}
+              {pagoDetalle.fotoBase64 && (
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="h6" gutterBottom color="primary" sx={{ display: 'flex', alignItems: 'center' }}>
+                    <PhotoCamera sx={{ mr: 1 }} />
+                    📷 Comprobante de Pago
+                  </Typography>
+                  <Box sx={{ 
+                    textAlign: 'center',
+                    p: 2,
+                    border: '2px solid',
+                    borderColor: 'primary.main',
+                    borderRadius: 2,
+                    bgcolor: 'grey.50'
+                  }}>
+                    <img 
+                      src={pagoDetalle.fotoBase64} 
+                      alt="Comprobante de pago"
+                      style={{
+                        maxWidth: '100%',
+                        maxHeight: '400px',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                      }}
+                    />
+                    <Typography variant="caption" display="block" sx={{ mt: 1, color: 'text.secondary' }}>
+                      📄 Comprobante enviado por el empleado
+                    </Typography>
+                  </Box>
+                </Box>
+              )}
+              
+              {!pagoDetalle.fotoBase64 && (
+                <Alert severity="warning" sx={{ mb: 3 }}>
+                  📷 No se adjuntó foto del comprobante
+                </Alert>
+              )}
+              
+              {/* Ubicación GPS con Mapa */}
+              {pagoDetalle.ubicacion && pagoDetalle.ubicacion.lat && pagoDetalle.ubicacion.lng && (
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="h6" gutterBottom color="primary" sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Box component="span" sx={{ mr: 1 }}>📍</Box>
+                    Ubicación GPS del Registro
+                  </Typography>
+                  
+                  {/* Coordenadas */}
+                  <Box sx={{ mb: 2, p: 2, bgcolor: 'info.light', borderRadius: 1 }}>
+                    <Typography variant="body2" color="info.contrastText">
+                      <strong>Coordenadas:</strong><br/>
+                      Latitud: {pagoDetalle.ubicacion.lat}<br/>
+                      Longitud: {pagoDetalle.ubicacion.lng}
+                    </Typography>
+                  </Box>
+                  
+                  {/* Mapa embebido - OpenStreetMap */}
+                  <Box sx={{ 
+                    border: '2px solid',
+                    borderColor: 'primary.main',
+                    borderRadius: 2,
+                    overflow: 'hidden',
+                    height: 300
+                  }}>
+                    <iframe
+                      src={`https://www.openstreetmap.org/export/embed.html?bbox=${pagoDetalle.ubicacion.lng-0.01},${pagoDetalle.ubicacion.lat-0.01},${pagoDetalle.ubicacion.lng+0.01},${pagoDetalle.ubicacion.lat+0.01}&layer=mapnik&marker=${pagoDetalle.ubicacion.lat},${pagoDetalle.ubicacion.lng}`}
+                      width="100%"
+                      height="100%"
+                      style={{ border: 0 }}
+                      title="Ubicación del registro de pago"
+                    />
+                  </Box>
+                  
+                  {/* Enlace para abrir en Google Maps */}
+                  <Box sx={{ mt: 1, textAlign: 'center' }}>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => window.open(`https://www.google.com/maps?q=${pagoDetalle.ubicacion.lat},${pagoDetalle.ubicacion.lng}`, '_blank')}
+                      sx={{ mr: 1 }}
+                    >
+                      🗺️ Abrir en Google Maps
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => window.open(`https://www.openstreetmap.org/?mlat=${pagoDetalle.ubicacion.lat}&mlon=${pagoDetalle.ubicacion.lng}&zoom=16`, '_blank')}
+                    >
+                      🌍 Ver en OpenStreetMap
+                    </Button>
+                  </Box>
+                  
+                  <Typography variant="caption" display="block" sx={{ mt: 1, textAlign: 'center', color: 'text.secondary' }}>
+                    🗺️ Ubicación donde el empleado registró el pago
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 3, bgcolor: 'grey.50' }}>
+          <Button
+            variant="contained"
+            color="success"
+            startIcon={<CheckCircle />}
+            onClick={() => {
+              handleConfirmarPago(pagoDetalle.id, 'aprobar');
+              setOpenPagoDetalle(false);
+            }}
+            size="large"
+          >
+            ✅ Aprobar Pago
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            startIcon={<Cancel />}
+            onClick={() => {
+              handleConfirmarPago(pagoDetalle.id, 'rechazar');
+              setOpenPagoDetalle(false);
+            }}
+            size="large"
+          >
+            ❌ Rechazar Pago
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={() => {
+              setOpenPagoDetalle(false);
+              setPagoDetalle(null);
+            }}
+            size="large"
+          >
+            Cerrar
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Dialog para Pago Directo */}
+      <Dialog
+        open={openPagoDirecto}
+        onClose={() => {
+          setOpenPagoDirecto(false);
+          setClientePagoDirecto(null);
+          setPagoDirectoData({ monto: '', tipoPago: 'efectivo', observaciones: '' });
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ bgcolor: 'success.main', color: 'white', display: 'flex', alignItems: 'center' }}>
+          <Payment sx={{ mr: 1 }} />
+          💰 Registrar Pago Directo
+        </DialogTitle>
+        <DialogContent sx={{ p: 3 }}>
+          {clientePagoDirecto && (
+            <Box>
+              <Alert severity="info" sx={{ mb: 3 }}>
+                <Typography variant="body2">
+                  💵 <strong>Pago directo al administrador</strong><br/>
+                  Se registrará y aprobará automáticamente sin pasar por empleados.
+                </Typography>
+              </Alert>
+              
+              <Box sx={{ mb: 3, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
+                <Typography variant="h6" color="primary">
+                  Cliente: {clientePagoDirecto.nombre} {clientePagoDirecto.apellido}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Teléfono: {clientePagoDirecto.telefono}<br/>
+                  Vehículo: {clientePagoDirecto.tipoVehiculo}<br/>
+                  Precio mensual: ${clientePagoDirecto.precio?.toLocaleString()}
+                </Typography>
+              </Box>
+              
+              <TextField
+                fullWidth
+                label="Monto del Pago *"
+                type="number"
+                value={pagoDirectoData.monto}
+                onChange={(e) => setPagoDirectoData({...pagoDirectoData, monto: e.target.value})}
+                placeholder={clientePagoDirecto.precio?.toString()}
+                helperText={`Precio sugerido: $${clientePagoDirecto.precio?.toLocaleString()}`}
+                sx={{ mb: 2 }}
+                inputProps={{ min: 0, step: 1000 }}
+              />
+              
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel>Tipo de Pago</InputLabel>
+                <Select
+                  value={pagoDirectoData.tipoPago}
+                  onChange={(e) => setPagoDirectoData({...pagoDirectoData, tipoPago: e.target.value})}
+                >
+                  <MenuItem value="efectivo">💵 Efectivo</MenuItem>
+                  <MenuItem value="transferencia">🏦 Transferencia</MenuItem>
+                  <MenuItem value="tarjeta">💳 Tarjeta</MenuItem>
+                </Select>
+              </FormControl>
+              
+              <TextField
+                fullWidth
+                label="Observaciones (Opcional)"
+                multiline
+                rows={2}
+                value={pagoDirectoData.observaciones}
+                onChange={(e) => setPagoDirectoData({...pagoDirectoData, observaciones: e.target.value})}
+                placeholder="Ej: Pago en oficina, descuento aplicado, etc."
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 3 }}>
+          <Button
+            variant="contained"
+            color="success"
+            onClick={handlePagoDirecto}
+            disabled={!pagoDirectoData.monto}
+            startIcon={<Payment />}
+            size="large"
+          >
+            💰 Registrar y Aprobar Pago
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={() => {
+              setOpenPagoDirecto(false);
+              setClientePagoDirecto(null);
+              setPagoDirectoData({ monto: '', tipoPago: 'efectivo', observaciones: '' });
+            }}
+            size="large"
+          >
+            Cancelar
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Alerta de Duplicados */}
+      <AlertaDuplicados
+        open={alertaDuplicados.open}
+        onClose={() => setAlertaDuplicados({ open: false, cliente: null, monto: '', duplicados: {}, onConfirm: null })}
+        onConfirm={() => {
+          if (alertaDuplicados.onConfirm) {
+            alertaDuplicados.onConfirm();
+          }
+          setAlertaDuplicados({ open: false, cliente: null, monto: '', duplicados: {}, onConfirm: null });
+        }}
+        cliente={alertaDuplicados.cliente}
+        monto={alertaDuplicados.monto}
+        duplicados={alertaDuplicados.duplicados}
+      />
+      
+      {/* Dialog para Importar Clientes */}
+      <ImportarClientes
+        open={openImportarClientes}
+        onClose={() => setOpenImportarClientes(false)}
+        onSuccess={() => {
+          cargarDatos();
+          setMensaje('✅ Clientes importados exitosamente');
+        }}
+      />
     </Container>
   );
 };

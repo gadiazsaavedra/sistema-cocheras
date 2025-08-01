@@ -41,18 +41,23 @@ import {
 import { clientesFirestore, pagosFirestore } from '../services/firestore';
 import { useAuth } from '../hooks/useAuth';
 import CameraCapture from '../components/CameraCapture';
+import { calcularEstadoCliente, getEstadoTexto } from '../utils/morosidad';
 
 const EmpleadoDashboard = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const { user, logout } = useAuth();
   const [clientes, setClientes] = useState([]);
+  const [todosLosPagos, setTodosLosPagos] = useState([]);
   const [openPago, setOpenPago] = useState(false);
   const [selectedCliente, setSelectedCliente] = useState(null);
   const [pagoData, setPagoData] = useState({
     monto: '',
     tipoPago: 'efectivo',
-    foto: null
+    foto: null,
+    esMoroso: false,
+    montoMinimo: 0,
+    diasVencido: 0
   });
   const [ubicacion, setUbicacion] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -72,7 +77,16 @@ const EmpleadoDashboard = () => {
 
   useEffect(() => {
     cargarClientes();
+    cargarPagos();
     obtenerUbicacion();
+    
+    // Recargar datos cada 10 segundos para mantener actualizado
+    const interval = setInterval(() => {
+      cargarClientes();
+      cargarPagos();
+    }, 10000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const cargarClientes = async () => {
@@ -80,12 +94,23 @@ const EmpleadoDashboard = () => {
     try {
       const response = await clientesFirestore.obtener();
       setClientes(response);
+      console.log('Clientes actualizados:', response.length);
     } catch (error) {
       console.error('Error cargando clientes:', error);
       setMensaje('Error cargando clientes');
       setSnackbarOpen(true);
     } finally {
       setLoadingClientes(false);
+    }
+  };
+
+  const cargarPagos = async () => {
+    try {
+      const response = await pagosFirestore.obtener();
+      setTodosLosPagos(response);
+      console.log('Pagos actualizados:', response.length);
+    } catch (error) {
+      console.error('Error cargando pagos:', error);
     }
   };
 
@@ -124,8 +149,27 @@ const EmpleadoDashboard = () => {
   };
 
   const handleRegistrarPago = (cliente) => {
+    const estadoMorosidad = calcularEstadoCliente(cliente, todosLosPagos);
+    const esMoroso = estadoMorosidad.estado === 'moroso' || estadoMorosidad.estado === 'vencido';
+    
     setSelectedCliente(cliente);
-    setPagoData({ monto: cliente.precio || '', tipoPago: 'efectivo', foto: null });
+    
+    // Si es moroso, calcular deuda total + mes actual
+    let montoRequerido = cliente.precio || 0;
+    if (esMoroso) {
+      // Deuda acumulada + mes actual
+      const mesesVencidos = Math.ceil(estadoMorosidad.diasVencido / 30);
+      montoRequerido = (cliente.precio || 0) * (mesesVencidos + 1);
+    }
+    
+    setPagoData({ 
+      monto: montoRequerido.toString(), 
+      tipoPago: 'efectivo', 
+      foto: null,
+      esMoroso,
+      montoMinimo: montoRequerido,
+      diasVencido: estadoMorosidad.diasVencido
+    });
     setOpenPago(true);
   };
 
@@ -140,6 +184,13 @@ const EmpleadoDashboard = () => {
       setMensaje('Obteniendo ubicación...');
       setSnackbarOpen(true);
       obtenerUbicacion();
+      return;
+    }
+    
+    // Validar monto mínimo para clientes morosos
+    if (pagoData.esMoroso && parseFloat(pagoData.monto) < pagoData.montoMinimo) {
+      setMensaje(`❌ Cliente moroso debe pagar mínimo $${pagoData.montoMinimo.toLocaleString()} (deuda + mes actual)`);
+      setSnackbarOpen(true);
       return;
     }
 
@@ -158,9 +209,19 @@ const EmpleadoDashboard = () => {
       setMensaje('✅ Pago registrado exitosamente. Pendiente de confirmación.');
       setSnackbarOpen(true);
       setOpenPago(false);
-      setPagoData({ monto: '', tipoPago: 'efectivo', foto: null });
+      setPagoData({ monto: '', tipoPago: 'efectivo', foto: null, esMoroso: false, montoMinimo: 0, diasVencido: 0 });
+      
+      // Recargar datos inmediatamente para actualizar estados
+      await Promise.all([cargarClientes(), cargarPagos()]);
+      
+      // Recargar nuevamente después de 2 segundos por si hay delay en el servidor
+      setTimeout(() => {
+        cargarClientes();
+        cargarPagos();
+      }, 2000);
     } catch (error) {
-      setMensaje('❌ Error registrando pago. Intente nuevamente.');
+      console.error('Error completo:', error);
+      setMensaje(`❌ Error: ${error.message || 'Error registrando pago. Intente nuevamente.'}`);
       setSnackbarOpen(true);
     }
     setLoading(false);
@@ -192,8 +253,8 @@ const EmpleadoDashboard = () => {
       
       const clienteCreado = await clientesFirestore.crear(clienteData);
       
-      // Agregar a la lista local
-      setClientes(prev => [...prev, clienteCreado]);
+      // Recargar datos para obtener información actualizada
+      await Promise.all([cargarClientes(), cargarPagos()]);
       
       setMensaje('✅ Cliente creado exitosamente');
       setSnackbarOpen(true);
@@ -251,6 +312,97 @@ const EmpleadoDashboard = () => {
           💰 Panel de Empleado
         </Typography>
 
+        {/* Sección de Clientes Morosos */}
+        {(() => {
+          const clientesConEstado = clientes.map(cliente => ({
+            ...cliente,
+            estadoMorosidad: calcularEstadoCliente(cliente, todosLosPagos)
+          }));
+          const clientesMorosos = clientesConEstado.filter(c => 
+            c.estadoMorosidad.estado === 'moroso' || c.estadoMorosidad.estado === 'vencido'
+          );
+          
+          if (clientesMorosos.length === 0) return null;
+          
+          return (
+            <Card elevation={3} sx={{ mb: 3, border: '2px solid #f44336' }}>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="h6" sx={{ color: 'error.main', fontWeight: 'bold' }}>
+                    🚨 CLIENTES MOROSOS ({clientesMorosos.length})
+                  </Typography>
+                </Box>
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  <Typography variant="body2">
+                    💡 <strong>Importante:</strong> Estos clientes tienen pagos vencidos. 
+                    Reclame el pago cuando los vea en el negocio.
+                  </Typography>
+                </Alert>
+                <List sx={{ maxHeight: 300, overflow: 'auto' }}>
+                  {clientesMorosos.map((cliente) => (
+                    <ListItem 
+                      key={cliente.id}
+                      sx={{ 
+                        border: '1px solid #f44336',
+                        borderRadius: 2,
+                        mb: 1,
+                        bgcolor: 'rgba(244, 67, 54, 0.1)',
+                        flexDirection: isMobile ? 'column' : 'row',
+                        alignItems: isMobile ? 'stretch' : 'center'
+                      }}
+                    >
+                      <ListItemText
+                        primary={
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: 'error.main' }}>
+                              {cliente.nombre} {cliente.apellido}
+                            </Typography>
+                            <Chip 
+                              label={getEstadoTexto(cliente.estadoMorosidad)}
+                              color="error"
+                              size="small"
+                              sx={{ fontWeight: 'bold' }}
+                            />
+                          </Box>
+                        }
+                        secondary={
+                          <Box>
+                            <Typography variant="body2" color="text.secondary">
+                              📞 {cliente.telefono}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              🚗 {cliente.tipoVehiculo} - 🏠 {cliente.numeroCochera}
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: 'error.main', fontWeight: 'bold' }}>
+                              💰 Debe: ${cliente.precio?.toLocaleString()}
+                            </Typography>
+                          </Box>
+                        }
+                        sx={{ mb: isMobile ? 2 : 0 }}
+                      />
+                      <Button
+                        variant="contained"
+                        color="error"
+                        onClick={() => handleRegistrarPago(cliente)}
+                        startIcon={<Payment />}
+                        fullWidth={isMobile}
+                        sx={{ 
+                          minWidth: isMobile ? 'auto' : 140,
+                          height: 40,
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        {isMobile ? 'Cobrar Deuda' : 'COBRAR'}
+                      </Button>
+                    </ListItem>
+                  ))}
+                </List>
+              </CardContent>
+            </Card>
+          );
+        })()
+        }
+
         <Grid container spacing={isMobile ? 2 : 3}>
           <Grid item xs={12}>
             <Card elevation={3}>
@@ -279,22 +431,43 @@ const EmpleadoDashboard = () => {
                   </Box>
                 ) : (
                   <List sx={{ maxHeight: isMobile ? 400 : 500, overflow: 'auto' }}>
-                    {clientes.map((cliente) => (
+                    {clientes.map((cliente) => {
+                      const estadoMorosidad = calcularEstadoCliente(cliente, todosLosPagos);
+                      const esMoroso = estadoMorosidad.estado === 'moroso' || estadoMorosidad.estado === 'vencido';
+                      
+                      return (
                       <ListItem 
                         key={cliente.id}
                         sx={{ 
-                          border: '1px solid #e0e0e0',
+                          border: esMoroso ? '2px solid #f44336' : '1px solid #e0e0e0',
                           borderRadius: 2,
                           mb: 1,
                           flexDirection: isMobile ? 'column' : 'row',
-                          alignItems: isMobile ? 'stretch' : 'center'
+                          alignItems: isMobile ? 'stretch' : 'center',
+                          bgcolor: esMoroso ? 'rgba(244, 67, 54, 0.05)' : 'inherit'
                         }}
                       >
                         <ListItemText
                           primary={
-                            <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-                              {cliente.nombre} {cliente.apellido}
-                            </Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Typography 
+                                variant="subtitle1" 
+                                sx={{ 
+                                  fontWeight: 'bold',
+                                  color: esMoroso ? 'error.main' : 'inherit'
+                                }}
+                              >
+                                {cliente.nombre} {cliente.apellido}
+                              </Typography>
+                              {esMoroso && (
+                                <Chip 
+                                  label="MOROSO"
+                                  color="error"
+                                  size="small"
+                                  sx={{ fontWeight: 'bold', fontSize: '0.7rem' }}
+                                />
+                              )}
+                            </Box>
                           }
                           secondary={
                             <Box>
@@ -315,19 +488,24 @@ const EmpleadoDashboard = () => {
                         />
                         <Button
                           variant="contained"
-                          color="primary"
+                          color={esMoroso ? 'error' : 'primary'}
                           onClick={() => handleRegistrarPago(cliente)}
                           startIcon={<Add />}
                           fullWidth={isMobile}
                           sx={{ 
                             minWidth: isMobile ? 'auto' : 140,
-                            height: 40
+                            height: 40,
+                            fontWeight: esMoroso ? 'bold' : 'normal'
                           }}
                         >
-                          {isMobile ? 'Registrar Pago' : 'Pago'}
+                          {esMoroso ? 
+                            (isMobile ? 'COBRAR DEUDA' : 'COBRAR') : 
+                            (isMobile ? 'Registrar Pago' : 'Pago')
+                          }
                         </Button>
                       </ListItem>
-                    ))}
+                      );
+                    })}
                   </List>
                 )}
               </CardContent>
@@ -355,15 +533,46 @@ const EmpleadoDashboard = () => {
         </DialogTitle>
         <DialogContent sx={{ p: isMobile ? 2 : 3 }}>
           <Box sx={{ pt: 2 }}>
+            {pagoData.esMoroso && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                  🚨 CLIENTE MOROSO - {pagoData.diasVencido} días vencido
+                </Typography>
+                <Typography variant="body2">
+                  💰 Debe pagar deuda completa + mes actual: <strong>${pagoData.montoMinimo.toLocaleString()}</strong>
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  No se permite pago parcial hasta regularizar situación
+                </Typography>
+              </Alert>
+            )}
+            
             <TextField
               fullWidth
-              label="Monto ($)"
+              label={pagoData.esMoroso ? "Monto Mínimo Requerido ($)" : "Monto ($)"}
               type="number"
               value={pagoData.monto}
-              onChange={(e) => setPagoData({...pagoData, monto: e.target.value})}
+              onChange={(e) => {
+                const valor = parseFloat(e.target.value) || 0;
+                if (pagoData.esMoroso && valor < pagoData.montoMinimo) {
+                  // Permitir escribir pero mostrar error
+                  setPagoData({...pagoData, monto: e.target.value});
+                } else {
+                  setPagoData({...pagoData, monto: e.target.value});
+                }
+              }}
               margin="normal"
-              inputProps={{ min: 0, step: 0.01 }}
+              inputProps={{ 
+                min: pagoData.esMoroso ? pagoData.montoMinimo : 0, 
+                step: 0.01 
+              }}
               size={isMobile ? 'medium' : 'medium'}
+              error={pagoData.esMoroso && parseFloat(pagoData.monto) < pagoData.montoMinimo}
+              helperText={
+                pagoData.esMoroso 
+                  ? `Monto mínimo: $${pagoData.montoMinimo.toLocaleString()} - ${parseFloat(pagoData.monto) < pagoData.montoMinimo ? '❌ Insuficiente' : '✅ Válido'}`
+                  : `Precio sugerido: $${selectedCliente?.precio?.toLocaleString() || 0}`
+              }
             />
             
             <FormControl fullWidth margin="normal">
@@ -404,12 +613,21 @@ const EmpleadoDashboard = () => {
               <Button
                 variant="contained"
                 onClick={handleSubmitPago}
-                disabled={loading || !pagoData.foto || !pagoData.monto}
+                disabled={
+                  loading || 
+                  !pagoData.foto || 
+                  !pagoData.monto ||
+                  (pagoData.esMoroso && parseFloat(pagoData.monto) < pagoData.montoMinimo)
+                }
                 fullWidth
                 size="large"
+                color={pagoData.esMoroso ? 'error' : 'primary'}
                 startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <Payment />}
               >
-                {loading ? 'Registrando...' : 'Registrar Pago'}
+                {loading ? 'Registrando...' : 
+                 pagoData.esMoroso ? `💰 Registrar Pago de Deuda ($${pagoData.montoMinimo.toLocaleString()})` : 
+                 'Registrar Pago'
+                }
               </Button>
               <Button
                 variant="outlined"

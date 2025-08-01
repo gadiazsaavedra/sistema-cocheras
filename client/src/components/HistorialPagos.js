@@ -17,7 +17,7 @@ import {
   IconButton
 } from '@mui/material';
 import { Close, Print } from '@mui/icons-material';
-import { pagosAPI } from '../services/api';
+import { pagosFirestore } from '../services/firestore';
 import moment from 'moment';
 
 const HistorialPagos = ({ open, onClose, cliente }) => {
@@ -33,10 +33,11 @@ const HistorialPagos = ({ open, onClose, cliente }) => {
   const cargarHistorial = async () => {
     setCargando(true);
     try {
-      const response = await pagosAPI.obtener();
-      const pagosCliente = response.data
+      const todosPagos = await pagosFirestore.obtener();
+      const pagosCliente = todosPagos
         .filter(pago => pago.clienteId === cliente.id)
-        .sort((a, b) => moment(b.fechaRegistro.toDate()) - moment(a.fechaRegistro.toDate()));
+        .sort((a, b) => new Date(b.fechaRegistro) - new Date(a.fechaRegistro));
+      console.log('Pagos del cliente:', pagosCliente);
       setPagos(pagosCliente);
     } catch (error) {
       console.error('Error cargando historial:', error);
@@ -61,7 +62,7 @@ const HistorialPagos = ({ open, onClose, cliente }) => {
     return {
       totalPagos: confirmados.length,
       totalMonto: totalPagado,
-      ultimoPago: ultimoPago ? moment(ultimoPago.fechaRegistro.toDate()).format('DD/MM/YYYY') : 'Nunca',
+      ultimoPago: ultimoPago ? moment(ultimoPago.fechaRegistro).format('DD/MM/YYYY') : 'Nunca',
       pendientes: pagos.filter(p => p.estado === 'pendiente').length
     };
   };
@@ -124,7 +125,7 @@ const HistorialPagos = ({ open, onClose, cliente }) => {
             <tbody>
               ${pagos.map(pago => `
                 <tr class="${pago.estado}">
-                  <td>${moment(pago.fechaRegistro.toDate()).format('DD/MM/YYYY HH:mm')}</td>
+                  <td>${moment(pago.fechaRegistro).format('DD/MM/YYYY HH:mm')}</td>
                   <td>$${pago.monto.toLocaleString()}</td>
                   <td>${pago.tipoPago}</td>
                   <td>${pago.estado.toUpperCase()}</td>
@@ -217,7 +218,7 @@ const HistorialPagos = ({ open, onClose, cliente }) => {
                 {pagos.map((pago) => (
                   <TableRow key={pago.id}>
                     <TableCell>
-                      {moment(pago.fechaRegistro.toDate()).format('DD/MM/YYYY HH:mm')}
+                      {moment(pago.fechaRegistro).format('DD/MM/YYYY HH:mm')}
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2" fontWeight="bold">
@@ -240,8 +241,8 @@ const HistorialPagos = ({ open, onClose, cliente }) => {
                     </TableCell>
                     <TableCell>{pago.empleadoNombre || 'N/A'}</TableCell>
                     <TableCell>
-                      {pago.confirmadoPor ? 
-                        `${moment(pago.fechaConfirmacion?.toDate()).format('DD/MM HH:mm')}` : 
+                      {pago.fechaConfirmacion ? 
+                        `${moment(pago.fechaConfirmacion).format('DD/MM HH:mm')}` : 
                         '-'
                       }
                     </TableCell>

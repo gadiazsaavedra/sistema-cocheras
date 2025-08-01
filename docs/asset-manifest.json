@@ -1,10 +1,10 @@
 {
   "files": {
-    "main.js": "/sistema-cocheras/static/js/main.644ab180.js",
-    "index.html": "/sistema-cocheras/index.html",
-    "main.644ab180.js.map": "/sistema-cocheras/static/js/main.644ab180.js.map"
+    "main.js": "/static/js/main.c580a501.js",
+    "index.html": "/index.html",
+    "main.c580a501.js.map": "/static/js/main.c580a501.js.map"
   },
   "entrypoints": [
-    "static/js/main.644ab180.js"
+    "static/js/main.c580a501.js"
   ]
 }

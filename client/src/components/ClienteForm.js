@@ -13,8 +13,17 @@ import {
   Grid,
   Typography
 } from '@mui/material';
+// import { clientesFirestore } from '../services/firestore';
+// import AlertaDuplicadosCliente from './AlertaDuplicadosCliente';
 
 const ClienteForm = ({ open, onClose, onSave, cliente = null }) => {
+  // const [alertaDuplicados, setAlertaDuplicados] = useState({
+  //   open: false,
+  //   clienteData: null,
+  //   duplicados: {},
+  //   onConfirm: null
+  // });
+  
   const [formData, setFormData] = useState({
     nombre: '',
     apellido: '',
@@ -82,14 +91,19 @@ const ClienteForm = ({ open, onClose, onSave, cliente = null }) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  // Función simplificada sin validación de duplicados
+  const guardarCliente = (clienteData) => {
+    onSave(clienteData);
+    onClose();
+  };
+
   const handleSubmit = () => {
     const clienteData = {
       ...formData,
       precio: getPrecio(),
       fechaProximoVencimiento: new Date(new Date(formData.fechaIngreso).getTime() + formData.diasVencimiento * 24 * 60 * 60 * 1000).toISOString()
     };
-    onSave(clienteData);
-    onClose();
+    guardarCliente(clienteData);
   };
 
   return (
@@ -249,6 +263,8 @@ const ClienteForm = ({ open, onClose, onSave, cliente = null }) => {
           </Box>
         </Box>
       </DialogContent>
+      
+      {/* Alerta de Duplicados temporalmente deshabilitada */}
     </Dialog>
   );
 };

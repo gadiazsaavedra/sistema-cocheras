@@ -189,6 +189,54 @@ app.put('/api/pagos/:id/confirmar', authenticateToken, async (req, res) => {
   }
 });
 
+// RUTA PARA LIMPIAR HISTORIAL (SOLO PARA PRUEBAS)
+app.delete('/api/admin/limpiar-historial', authenticateToken, async (req, res) => {
+  try {
+    console.log('Solicitud de limpiar historial de:', req.user.email);
+    
+    // Verificar que sea administrador
+    const adminEmails = ['gadiazsaavedra@gmail.com', 'c.andrea.lopez@hotmail.com'];
+    if (!adminEmails.includes(req.user.email)) {
+      console.log('Acceso denegado para:', req.user.email);
+      return res.status(403).json({ error: 'Solo administradores pueden limpiar historial' });
+    }
+    
+    // Obtener todos los pagos
+    const pagosSnapshot = await db.collection('pagos').get();
+    console.log(`Encontrados ${pagosSnapshot.docs.length} pagos para eliminar`);
+    
+    if (pagosSnapshot.docs.length === 0) {
+      return res.json({ message: 'No hay pagos para eliminar', count: 0 });
+    }
+    
+    // Eliminar en lotes de 500 (límite de Firestore)
+    const batchSize = 500;
+    let deletedCount = 0;
+    
+    for (let i = 0; i < pagosSnapshot.docs.length; i += batchSize) {
+      const batch = db.batch();
+      const batchDocs = pagosSnapshot.docs.slice(i, i + batchSize);
+      
+      batchDocs.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+      
+      await batch.commit();
+      deletedCount += batchDocs.length;
+      console.log(`Eliminados ${deletedCount}/${pagosSnapshot.docs.length} pagos`);
+    }
+    
+    console.log(`Historial limpiado exitosamente por ${req.user.email}. Total eliminados: ${deletedCount}`);
+    res.json({ 
+      message: 'Historial de pagos eliminado exitosamente', 
+      count: deletedCount 
+    });
+  } catch (error) {
+    console.error('Error limpiando historial:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // RUTAS DE REPORTES
 app.get('/api/reportes/clientes', authenticateToken, async (req, res) => {
   try {

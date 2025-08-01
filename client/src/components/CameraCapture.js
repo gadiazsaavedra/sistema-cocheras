@@ -37,6 +37,10 @@ const CameraCapture = ({ onCapture, captured }) => {
       
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
+        // Asegurar que el video se reproduzca
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current.play().catch(console.error);
+        };
       }
     } catch (error) {
       console.error('Error accediendo a la cámara:', error);
@@ -108,6 +112,12 @@ const CameraCapture = ({ onCapture, captured }) => {
       const canvas = canvasRef.current;
       const context = canvas.getContext('2d');
       
+      // Verificar que el video tenga dimensiones
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
+        setError('Error: Video no inicializado. Intente cerrar y abrir la cámara.');
+        return;
+      }
+      
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       
@@ -139,6 +149,36 @@ const CameraCapture = ({ onCapture, captured }) => {
       
       {!showCamera && !captured && (
         <Box>
+          {/* Input nativo para cámara móvil */}
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={(e) => {
+              const file = e.target.files[0];
+              if (file) {
+                onCapture(file);
+              }
+            }}
+            style={{ display: 'none' }}
+            id="camera-input"
+          />
+          
+          <Button
+            variant="contained"
+            startIcon={<PhotoCamera />}
+            onClick={() => document.getElementById('camera-input').click()}
+            fullWidth
+            size={isMobile ? 'large' : 'medium'}
+            sx={{ 
+              height: isMobile ? 56 : 48,
+              fontSize: isMobile ? '1.1rem' : '1rem',
+              mb: 1
+            }}
+          >
+            📷 Tomar Foto del Comprobante
+          </Button>
+          
           <Button
             variant="outlined"
             startIcon={loading ? <CircularProgress size={20} /> : <PhotoCamera />}
@@ -148,31 +188,11 @@ const CameraCapture = ({ onCapture, captured }) => {
             size={isMobile ? 'large' : 'medium'}
             sx={{ 
               height: isMobile ? 56 : 48,
-              fontSize: isMobile ? '1.1rem' : '1rem',
-              mb: error && window.location.hostname !== 'localhost' ? 1 : 0
+              fontSize: isMobile ? '1.1rem' : '1rem'
             }}
-            color={error ? 'error' : 'primary'}
           >
-            {loading ? 'Iniciando cámara...' : '📷 Tomar Foto del Comprobante'}
+            {loading ? 'Iniciando cámara...' : '📹 Cámara Avanzada (Opcional)'}
           </Button>
-          
-          {/* Botón simulador solo si hay error y no es localhost */}
-          {error && window.location.hostname !== 'localhost' && (
-            <Button
-              variant="contained"
-              onClick={simularFoto}
-              fullWidth
-              size={isMobile ? 'large' : 'medium'}
-              sx={{ 
-                height: isMobile ? 56 : 48,
-                fontSize: isMobile ? '1.1rem' : '1rem',
-                bgcolor: 'orange',
-                '&:hover': { bgcolor: 'darkorange' }
-              }}
-            >
-              📱 Usar Foto Simulada (Desarrollo)
-            </Button>
-          )}
         </Box>
       )}
       
@@ -216,11 +236,18 @@ const CameraCapture = ({ onCapture, captured }) => {
               ref={videoRef}
               autoPlay
               playsInline
+              muted
+              onCanPlay={() => {
+                if (videoRef.current) {
+                  videoRef.current.play().catch(console.error);
+                }
+              }}
               style={{ 
                 width: '100%', 
                 maxWidth: isMobile ? '100%' : '400px', 
                 borderRadius: '12px',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+                boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+                backgroundColor: '#000'
               }}
             />
             
