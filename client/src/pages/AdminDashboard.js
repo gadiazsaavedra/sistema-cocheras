@@ -39,6 +39,9 @@ import ReporteDisponibilidad from '../components/ReporteDisponibilidad';
 import PagosSinIdentificar from '../components/PagosSinIdentificar';
 import AlertaDuplicados from '../components/AlertaDuplicados';
 import ImportarClientes from '../components/ImportarClientes';
+import GestionPrecios from '../components/GestionPrecios';
+import ExportarClientes from '../components/ExportarClientes';
+import AumentosGraduales from '../components/AumentosGraduales';
 // import { limpiarClientesPrueba } from '../utils/limpiarDatosPrueba'; // Removido
 import { calcularEstadoCliente, getEstadoTexto } from '../utils/morosidad';
 import moment from 'moment';
@@ -79,6 +82,7 @@ const AdminDashboard = () => {
   const [filtroOrden, setFiltroOrden] = useState('nombre');
   const [busquedaCliente, setBusquedaCliente] = useState('');
   const [loadingHistorial, setLoadingHistorial] = useState(false);
+  const [openExportarClientes, setOpenExportarClientes] = useState(false);
 
   useEffect(() => {
     cargarDatos();
@@ -315,7 +319,12 @@ const AdminDashboard = () => {
     
     // Aplicar ordenamiento
     clientesFiltrados.sort((a, b) => {
-      // Prioridad: morosos primero, luego por vencer, luego al día
+      // Si se seleccionó ordenamiento por morosidad, usar solo ese criterio
+      if (filtroOrden === 'morosidad') {
+        return (b.estadoMorosidad?.diasVencido || 0) - (a.estadoMorosidad?.diasVencido || 0);
+      }
+      
+      // Para otros ordenamientos, mantener prioridad de morosos primero
       const prioridadEstado = { moroso: 0, vencido: 1, por_vencer: 2, al_dia: 3, sin_fecha: 4 };
       const prioridadA = prioridadEstado[a.estadoMorosidad.estado] || 5;
       const prioridadB = prioridadEstado[b.estadoMorosidad.estado] || 5;
@@ -424,6 +433,8 @@ const AdminDashboard = () => {
           <Tab label="Pagos Sin Identificar" />
           <Tab label="Disponibilidad" />
           <Tab label="Configuración de Precios" />
+          <Tab label="Gestión de Precios" />
+          <Tab label="Aumentos Graduales" />
           <Tab label="Reportes Avanzados" />
           <Tab label="Reportes Básicos" />
         </Tabs>
@@ -530,6 +541,14 @@ const AdminDashboard = () => {
                 >
                   📊 Importar desde Excel
                 </Button>
+                <Button
+                  variant="contained"
+                  startIcon={<Print />}
+                  onClick={() => setOpenExportarClientes(true)}
+                  color="primary"
+                >
+                  📋 Exportar Lista
+                </Button>
                 <Button 
                   variant="outlined"
                   onClick={cargarDatos}
@@ -623,6 +642,7 @@ const AdminDashboard = () => {
                     <MenuItem value="vehiculo">Vehículo</MenuItem>
                     <MenuItem value="precio">Precio (Mayor a Menor)</MenuItem>
                     <MenuItem value="vencimiento">Próximo Vencimiento</MenuItem>
+                    <MenuItem value="morosidad">Días de Morosidad (Mayor a Menor)</MenuItem>
                   </Select>
                 </FormControl>
                 
@@ -785,10 +805,18 @@ const AdminDashboard = () => {
       </TabPanel>
 
       <TabPanel value={tabValue} index={5}>
-        <ReportesAvanzados />
+        <GestionPrecios />
       </TabPanel>
 
       <TabPanel value={tabValue} index={6}>
+        <AumentosGraduales />
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={7}>
+        <ReportesAvanzados />
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={8}>
         <Card>
           <CardContent>
             <Typography variant="h6" gutterBottom>
@@ -1267,6 +1295,23 @@ const AdminDashboard = () => {
           cargarDatos();
           setMensaje('✅ Clientes importados exitosamente');
         }}
+      />
+      
+      {/* Dialog para Exportar Clientes */}
+      <ExportarClientes
+        open={openExportarClientes}
+        onClose={() => setOpenExportarClientes(false)}
+        clientes={getClientesFiltrados()}
+        todosLosPagos={todosLosPagos}
+        ordenamiento={{
+          nombre: 'Nombre',
+          apellido: 'Apellido',
+          telefono: 'Teléfono',
+          vehiculo: 'Vehículo',
+          precio: 'Precio (Mayor a Menor)',
+          vencimiento: 'Próximo Vencimiento',
+          morosidad: 'Días de Morosidad (Mayor a Menor)'
+        }[filtroOrden] || 'Nombre'}
       />
     </Container>
   );

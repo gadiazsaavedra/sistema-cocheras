@@ -40,13 +40,14 @@ cd client && npm run build && cd ..
 
 # 5. Verificar que el servidor funciona
 echo "🔍 Verificando servidor..."
-timeout 10s node server.js &
+node server.js &
 SERVER_PID=$!
-sleep 5
+sleep 3
 
 if kill -0 $SERVER_PID 2>/dev/null; then
   echo "✅ Servidor funcionando correctamente"
   kill $SERVER_PID
+  sleep 1
 else
   echo "❌ Error en el servidor. Despliegue cancelado."
   exit 1

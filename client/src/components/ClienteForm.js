@@ -11,10 +11,12 @@ import {
   Button,
   Box,
   Grid,
-  Typography
+  Typography,
+  Checkbox,
+  FormControlLabel,
+  Alert
 } from '@mui/material';
-// import { clientesFirestore } from '../services/firestore';
-// import AlertaDuplicadosCliente from './AlertaDuplicadosCliente';
+import { preciosFirestore } from '../services/firestore';
 
 const ClienteForm = ({ open, onClose, onSave, cliente = null }) => {
   // const [alertaDuplicados, setAlertaDuplicados] = useState({
@@ -33,8 +35,37 @@ const ClienteForm = ({ open, onClose, onSave, cliente = null }) => {
     modalidadTecho: 'bajo techo',
     fechaIngreso: new Date().toISOString().split('T')[0],
     diasVencimiento: 30,
-    empleadoAsignado: ''
+    empleadoAsignado: '',
+    // Campos para aumentos graduales
+    esClienteAntiguo: false,
+    precioBase: '',
+    precioObjetivo: '',
+    aumentoMensual: '',
+    proximoAumento: ''
   });
+  
+  const [precios, setPrecios] = useState({});
+  const [cargandoPrecios, setCargandoPrecios] = useState(true);
+
+  // Cargar precios desde Firebase
+  useEffect(() => {
+    const cargarPrecios = async () => {
+      try {
+        setCargandoPrecios(true);
+        // Intentar migrar desde localStorage si existe
+        await preciosFirestore.migrarDesdeLocalStorage();
+        // Obtener precios de Firebase
+        const preciosFirebase = await preciosFirestore.obtener();
+        setPrecios(preciosFirebase);
+      } catch (error) {
+        console.error('Error cargando precios:', error);
+      } finally {
+        setCargandoPrecios(false);
+      }
+    };
+    
+    cargarPrecios();
+  }, []);
 
   // Actualizar formData cuando cambie el cliente
   useEffect(() => {
@@ -48,7 +79,13 @@ const ClienteForm = ({ open, onClose, onSave, cliente = null }) => {
         modalidadTecho: cliente.modalidadTecho || 'bajo techo',
         fechaIngreso: cliente.fechaIngreso ? cliente.fechaIngreso.split('T')[0] : new Date().toISOString().split('T')[0],
         diasVencimiento: cliente.diasVencimiento || 30,
-        empleadoAsignado: cliente.empleadoAsignado || ''
+        empleadoAsignado: cliente.empleadoAsignado || '',
+        // Campos de aumentos graduales
+        esClienteAntiguo: cliente.esClienteAntiguo || false,
+        precioBase: cliente.precioBase || '',
+        precioObjetivo: cliente.precioObjetivo || '',
+        aumentoMensual: cliente.aumentoMensual || '',
+        proximoAumento: cliente.proximoAumento || ''
       });
     } else {
       setFormData({
@@ -60,30 +97,18 @@ const ClienteForm = ({ open, onClose, onSave, cliente = null }) => {
         modalidadTecho: 'bajo techo',
         fechaIngreso: new Date().toISOString().split('T')[0],
         diasVencimiento: 30,
-        empleadoAsignado: ''
+        empleadoAsignado: '',
+        esClienteAntiguo: false,
+        precioBase: '',
+        precioObjetivo: '',
+        aumentoMensual: '',
+        proximoAumento: ''
       });
     }
   }, [cliente]);
 
-  // Obtener precios de localStorage o usar valores por defecto
-  const getPreciosTabla = () => {
-    const preciosGuardados = localStorage.getItem('tablaPreciosCocheras');
-    if (preciosGuardados) {
-      return JSON.parse(preciosGuardados);
-    }
-    return {
-      moto: { diurna: { 'bajo techo': 15000, 'bajo carpa': 12000 }, nocturna: { 'bajo techo': 18000, 'bajo carpa': 15000 }, '24hs': { 'bajo techo': 25000, 'bajo carpa': 20000 } },
-      auto: { diurna: { 'bajo techo': 20000, 'bajo carpa': 17000 }, nocturna: { 'bajo techo': 23000, 'bajo carpa': 20000 }, '24hs': { 'bajo techo': 35000, 'bajo carpa': 30000 } },
-      camioneta: { diurna: { 'bajo techo': 25000, 'bajo carpa': 22000 }, nocturna: { 'bajo techo': 28000, 'bajo carpa': 25000 }, '24hs': { 'bajo techo': 40000, 'bajo carpa': 35000 } },
-      furgon: { diurna: { 'bajo techo': 30000, 'bajo carpa': 27000 }, nocturna: { 'bajo techo': 33000, 'bajo carpa': 30000 }, '24hs': { 'bajo techo': 45000, 'bajo carpa': 40000 } },
-      camion: { diurna: { 'bajo techo': 40000, 'bajo carpa': 35000 }, nocturna: { 'bajo techo': 45000, 'bajo carpa': 40000 }, '24hs': { 'bajo techo': 60000, 'bajo carpa': 55000 } },
-      trailer: { diurna: { 'bajo techo': 50000, 'bajo carpa': 45000 }, nocturna: { 'bajo techo': 55000, 'bajo carpa': 50000 }, '24hs': { 'bajo techo': 75000, 'bajo carpa': 70000 } }
-    };
-  };
-
-  const precios = getPreciosTabla();
-
   const getPrecio = () => {
+    if (cargandoPrecios || !precios[formData.tipoVehiculo]) return 0;
     return precios[formData.tipoVehiculo]?.[formData.modalidadTiempo]?.[formData.modalidadTecho] || 0;
   };
 
@@ -239,12 +264,103 @@ const ClienteForm = ({ open, onClose, onSave, cliente = null }) => {
             
             <Grid item xs={12}>
               <Box sx={{ p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
-                <Typography variant="h6" color="primary">
-                  Precio: ${getPrecio().toLocaleString()} cada {formData.diasVencimiento} días
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Próximo vencimiento: {new Date(new Date(formData.fechaIngreso).getTime() + formData.diasVencimiento * 24 * 60 * 60 * 1000).toLocaleDateString()}
-                </Typography>
+                {cargandoPrecios ? (
+                  <Typography variant="h6" color="text.secondary">
+                    Cargando precios...
+                  </Typography>
+                ) : (
+                  <>
+                    <Typography variant="h6" color="primary">
+                      Precio: ${getPrecio().toLocaleString()} cada {formData.diasVencimiento} días
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Próximo vencimiento: {new Date(new Date(formData.fechaIngreso).getTime() + formData.diasVencimiento * 24 * 60 * 60 * 1000).toLocaleDateString()}
+                    </Typography>
+                  </>
+                )}
+              </Box>
+            </Grid>
+            
+            {/* Sección de Aumentos Graduales */}
+            <Grid item xs={12}>
+              <Box sx={{ mt: 2, p: 2, border: '1px solid #e0e0e0', borderRadius: 2 }}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={formData.esClienteAntiguo}
+                      onChange={(e) => handleChange('esClienteAntiguo', e.target.checked)}
+                    />
+                  }
+                  label="🕰️ Cliente Antiguo (Precio Personalizado con Aumentos Graduales)"
+                  sx={{ mb: 2 }}
+                />
+                
+                {formData.esClienteAntiguo && (
+                  <Box>
+                    <Typography variant="subtitle2" color="primary" gutterBottom>
+                      📈 Configuración de Aumentos Graduales
+                    </Typography>
+                    
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          fullWidth
+                          label="Precio Base Actual ($)"
+                          type="number"
+                          value={formData.precioBase}
+                          onChange={(e) => handleChange('precioBase', e.target.value)}
+                          helperText="Precio que paga actualmente"
+                          inputProps={{ min: 0 }}
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          fullWidth
+                          label="Precio Objetivo ($)"
+                          type="number"
+                          value={formData.precioObjetivo}
+                          onChange={(e) => handleChange('precioObjetivo', e.target.value)}
+                          helperText="Precio a alcanzar (clientes nuevos)"
+                          inputProps={{ min: 0 }}
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          fullWidth
+                          label="Aumento Mensual ($)"
+                          type="number"
+                          value={formData.aumentoMensual}
+                          onChange={(e) => handleChange('aumentoMensual', e.target.value)}
+                          helperText="Aumento cada mes"
+                          inputProps={{ min: 0 }}
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          fullWidth
+                          label="Próximo Aumento"
+                          type="date"
+                          value={formData.proximoAumento}
+                          onChange={(e) => handleChange('proximoAumento', e.target.value)}
+                          InputLabelProps={{ shrink: true }}
+                          helperText="Fecha del próximo aumento"
+                        />
+                      </Grid>
+                    </Grid>
+                    
+                    {formData.precioBase && formData.precioObjetivo && formData.aumentoMensual && (
+                      <Alert severity="info" sx={{ mt: 2 }}>
+                        <Typography variant="body2">
+                          📈 <strong>Simulación:</strong><br/>
+                          Precio actual: ${parseFloat(formData.precioBase || 0).toLocaleString()}<br/>
+                          Precio objetivo: ${parseFloat(formData.precioObjetivo || 0).toLocaleString()}<br/>
+                          Diferencia: ${(parseFloat(formData.precioObjetivo || 0) - parseFloat(formData.precioBase || 0)).toLocaleString()}<br/>
+                          Meses para equiparar: {Math.ceil((parseFloat(formData.precioObjetivo || 0) - parseFloat(formData.precioBase || 0)) / parseFloat(formData.aumentoMensual || 1))} meses
+                        </Typography>
+                      </Alert>
+                    )}
+                  </Box>
+                )}
               </Box>
             </Grid>
           </Grid>

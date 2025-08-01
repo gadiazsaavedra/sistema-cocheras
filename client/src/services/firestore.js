@@ -43,8 +43,10 @@ const calcularDistanciaLevenshtein = (str1, str2) => {
 };
 
 export const clientesFirestore = {
-  obtener: async () => {
-    const snapshot = await getDocs(collection(db, 'clientes'));
+  obtener: async (limite = 1000) => {
+    const { limit } = await import('firebase/firestore');
+    const q = limite ? query(collection(db, 'clientes'), limit(limite)) : collection(db, 'clientes');
+    const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   },
 
@@ -102,7 +104,7 @@ export const clientesFirestore = {
         hayDuplicados: !!duplicadoTelefono || duplicadosNombre.length > 0
       };
     } catch (error) {
-      console.error('Error verificando duplicados:', error);
+      console.error('Error verificando duplicados');
       return {
         duplicadoTelefono: null,
         duplicadosNombre: [],
@@ -217,13 +219,16 @@ export const pagosFirestore = {
         ultimosPagos: pagosCliente.slice(0, 3).sort((a, b) => new Date(b.fechaRegistro) - new Date(a.fechaRegistro))
       };
     } catch (error) {
-      console.error('Error verificando duplicados:', error);
+      console.error('Error verificando duplicados de pagos');
       return { pagosHoy: [], pagosRecientes: [], pagosMismoMonto: [], ultimosPagos: [] };
     }
   },
 
   obtener: async (filtros = {}) => {
-    const snapshot = await getDocs(collection(db, 'pagos'));
+    const { limit } = await import('firebase/firestore');
+    const limite = filtros.limite || 1000;
+    const q = query(collection(db, 'pagos'), limit(limite));
+    const snapshot = await getDocs(q);
     let pagos = snapshot.docs.map(doc => {
       const data = doc.data();
       return {
@@ -257,7 +262,7 @@ export const pagosFirestore = {
     const user = auth.currentUser;
     if (!user) throw new Error('Usuario no autenticado');
 
-    console.log('Creando pago:', pagoData);
+    // Iniciando creación de pago
 
     // Comprimir y guardar foto como base64
     let fotoBase64 = null;
@@ -265,7 +270,7 @@ export const pagosFirestore = {
       try {
         fotoBase64 = await comprimirImagen(pagoData.foto);
       } catch (error) {
-        console.error('Error procesando foto:', error);
+        console.error('Error procesando foto');
         fotoBase64 = null;
       }
     }
@@ -284,15 +289,12 @@ export const pagosFirestore = {
         estado: 'pendiente'
       });
       
-      console.log('Pago creado exitosamente:', docRef.id);
+      // Pago creado exitosamente
       return { id: docRef.id, ...pagoData };
     } catch (firestoreError) {
-      console.error('Error guardando en Firestore:', firestoreError);
-      throw new Error('Error guardando pago: ' + firestoreError.message);
+      console.error('Error guardando en Firestore');
+      throw new Error('Error guardando pago');
     }
-
-    console.log('Pago creado:', docRef.id);
-    return { id: docRef.id, ...pagoData };
   },
 
   confirmar: async (id, accion) => {
@@ -328,5 +330,81 @@ export const reportesFirestore = {
         estado: pagoReciente ? 'Al día' : 'Pendiente'
       };
     });
+  }
+};
+
+// Constante con precios por defecto para evitar duplicación
+const PRECIOS_DEFECTO = {
+  moto: { diurna: { 'bajo techo': 15000, 'bajo carpa': 12000 }, nocturna: { 'bajo techo': 18000, 'bajo carpa': 15000 }, '24hs': { 'bajo techo': 25000, 'bajo carpa': 20000 } },
+  auto: { diurna: { 'bajo techo': 20000, 'bajo carpa': 17000 }, nocturna: { 'bajo techo': 23000, 'bajo carpa': 20000 }, '24hs': { 'bajo techo': 35000, 'bajo carpa': 30000 } },
+  camioneta: { diurna: { 'bajo techo': 25000, 'bajo carpa': 22000 }, nocturna: { 'bajo techo': 28000, 'bajo carpa': 25000 }, '24hs': { 'bajo techo': 40000, 'bajo carpa': 35000 } },
+  furgon: { diurna: { 'bajo techo': 30000, 'bajo carpa': 27000 }, nocturna: { 'bajo techo': 33000, 'bajo carpa': 30000 }, '24hs': { 'bajo techo': 45000, 'bajo carpa': 40000 } },
+  camion: { diurna: { 'bajo techo': 40000, 'bajo carpa': 35000 }, nocturna: { 'bajo techo': 45000, 'bajo carpa': 40000 }, '24hs': { 'bajo techo': 60000, 'bajo carpa': 55000 } },
+  trailer: { diurna: { 'bajo techo': 50000, 'bajo carpa': 45000 }, nocturna: { 'bajo techo': 55000, 'bajo carpa': 50000 }, '24hs': { 'bajo techo': 75000, 'bajo carpa': 70000 } }
+};
+
+// CONFIGURACIÓN DE PRECIOS
+export const preciosFirestore = {
+  obtener: async () => {
+    try {
+      const snapshot = await getDocs(collection(db, 'configuracion'));
+      const configDoc = snapshot.docs.find(doc => doc.id === 'precios');
+      
+      if (configDoc) {
+        return configDoc.data().tabla;
+      }
+      
+      await preciosFirestore.guardar(PRECIOS_DEFECTO);
+      return PRECIOS_DEFECTO;
+    } catch (error) {
+      console.error('Error obteniendo precios');
+      return PRECIOS_DEFECTO;
+    }
+  },
+  
+  guardar: async (tablaPrecios) => {
+    const { setDoc } = await import('firebase/firestore');
+    await setDoc(doc(db, 'configuracion', 'precios'), {
+      tabla: tablaPrecios,
+      fechaActualizacion: serverTimestamp()
+    });
+    return tablaPrecios;
+  },
+  
+  migrarDesdeLocalStorage: async () => {
+    try {
+      const preciosLocal = localStorage.getItem('tablaPreciosCocheras');
+      if (preciosLocal) {
+        const tabla = JSON.parse(preciosLocal);
+        await preciosFirestore.guardar(tabla);
+        // Precios migrados exitosamente
+        return tabla;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error migrando precios');
+      return null;
+    }
+  }
+};
+
+// AUMENTOS DE PRECIOS
+export const aumentosFirestore = {
+  crear: async (aumentoData) => {
+    const docRef = await addDoc(collection(db, 'aumentos'), {
+      ...aumentoData,
+      fechaCreacion: serverTimestamp()
+    });
+    return { id: docRef.id, ...aumentoData };
+  },
+  
+  obtener: async () => {
+    const q = query(collection(db, 'aumentos'), orderBy('fechaCreacion', 'desc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      fechaCreacion: doc.data().fechaCreacion?.toDate?.()?.toISOString() || doc.data().fechaCreacion
+    }));
   }
 };

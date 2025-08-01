@@ -25,7 +25,7 @@ const getApiUrl = () => {
 
 const API_BASE_URL = getApiUrl();
 
-console.log('API URL configurada:', API_BASE_URL);
+// API URL configurada para entorno actual
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -40,22 +40,27 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+const handleApiError = (operation) => (err) => {
+  const message = err.response?.data?.message || `Error en ${operation}`;
+  throw new Error(message);
+};
+
 export const clientesAPI = {
-  obtener: () => api.get('/clientes'),
-  crear: (cliente) => api.post('/clientes', cliente),
-  actualizar: (id, cliente) => api.put(`/clientes/${id}`, cliente),
+  obtener: () => api.get('/clientes').catch(handleApiError('obtener clientes')),
+  crear: (cliente) => api.post('/clientes', cliente).catch(handleApiError('crear cliente')),
+  actualizar: (id, cliente) => api.put(`/clientes/${id}`, cliente).catch(handleApiError('actualizar cliente')),
 };
 
 export const pagosAPI = {
-  obtener: (filtros = {}) => api.get('/pagos', { params: filtros }),
+  obtener: (filtros = {}) => api.get('/pagos', { params: filtros }).catch(handleApiError('obtener pagos')),
   crear: (formData) => api.post('/pagos', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
-  }),
-  confirmar: (id, accion) => api.put(`/pagos/${id}/confirmar`, { accion }),
+  }).catch(handleApiError('crear pago')),
+  confirmar: (id, action) => api.put(`/pagos/${id}/confirmar`, { action }).catch(handleApiError('confirmar pago')),
 };
 
 export const reportesAPI = {
-  clientes: (filtros = {}) => api.get('/reportes/clientes', { params: filtros }),
+  clientes: (filtros = {}) => api.get('/reportes/clientes', { params: filtros }).catch(handleApiError('generar reporte')),
 };
 
 export default api;

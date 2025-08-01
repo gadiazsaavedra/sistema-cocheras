@@ -191,6 +191,40 @@ app.put('/api/pagos/:id/confirmar', authenticateToken, async (req, res) => {
   }
 });
 
+// RUTAS PARA GESTIÓN DE AUMENTOS DE PRECIOS
+app.post('/api/aumentos', authenticateToken, async (req, res) => {
+  try {
+    const aumentoData = {
+      ...req.body,
+      fechaCreacion: admin.firestore.FieldValue.serverTimestamp(),
+      creadoPor: req.user.uid
+    };
+    
+    const docRef = await db.collection('aumentos').add(aumentoData);
+    res.json({ id: docRef.id, ...aumentoData });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/aumentos', authenticateToken, async (req, res) => {
+  try {
+    const snapshot = await db.collection('aumentos')
+      .orderBy('fechaCreacion', 'desc')
+      .get();
+    
+    const aumentos = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      fechaCreacion: doc.data().fechaCreacion?.toDate().toISOString()
+    }));
+    
+    res.json(aumentos);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // RUTA PARA LIMPIAR HISTORIAL (SOLO PARA PRUEBAS)
 app.delete('/api/admin/limpiar-historial', authenticateToken, async (req, res) => {
   try {
