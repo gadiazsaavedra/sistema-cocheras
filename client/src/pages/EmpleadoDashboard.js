@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy, useMemo, useCallback } from 'react';
 import {
   Container,
   Grid,
@@ -40,8 +40,11 @@ import {
 } from '@mui/icons-material';
 import { clientesFirestore, pagosFirestore } from '../services/firestore';
 import { useAuth } from '../hooks/useAuth';
-import CameraCapture from '../components/CameraCapture';
 import { calcularEstadoCliente, getEstadoTexto } from '../utils/morosidad';
+import ClienteItem from '../components/MemoizedClienteItem';
+
+// Lazy loading del componente de cámara
+const CameraCapture = lazy(() => import('../components/CameraCapture'));
 
 const EmpleadoDashboard = () => {
   const theme = useTheme();
@@ -88,14 +91,17 @@ const EmpleadoDashboard = () => {
     }, 10000);
     
     return () => clearInterval(interval);
-  }, []);
+  }, [cargarClientes, cargarPagos]);
 
-  const cargarClientes = async () => {
+  const cargarClientes = useCallback(async () => {
     setLoadingClientes(true);
     try {
-      const response = await clientesFirestore.obtener();
-      setClientes(response);
-      console.log('Clientes actualizados:', response.length);
+      const response = await clientesFirestore.obtener({ 
+        empleadoId: user?.uid,
+        limite: 100 
+      });
+      const clientesData = response.datos || response;
+      setClientes(clientesData);
     } catch (error) {
       console.error('Error cargando clientes:', error);
       setMensaje('Error cargando clientes');
@@ -103,17 +109,20 @@ const EmpleadoDashboard = () => {
     } finally {
       setLoadingClientes(false);
     }
-  };
+  }, [user?.uid]);
 
-  const cargarPagos = async () => {
+  const cargarPagos = useCallback(async () => {
     try {
-      const response = await pagosFirestore.obtener();
-      setTodosLosPagos(response);
-      console.log('Pagos actualizados:', response.length);
+      const response = await pagosFirestore.obtener({ 
+        empleadoId: user?.uid,
+        limite: 50 
+      });
+      const pagosData = response.datos || response;
+      setTodosLosPagos(pagosData);
     } catch (error) {
       console.error('Error cargando pagos:', error);
     }
-  };
+  }, [user?.uid]);
 
   const obtenerUbicacion = () => {
     if (navigator.geolocation) {
@@ -149,7 +158,7 @@ const EmpleadoDashboard = () => {
     }
   };
 
-  const handleRegistrarPago = (cliente) => {
+  const handleRegistrarPago = useCallback((cliente) => {
     const estadoMorosidad = calcularEstadoCliente(cliente, todosLosPagos);
     const esMoroso = estadoMorosidad.estado === 'moroso' || estadoMorosidad.estado === 'vencido';
     
@@ -172,7 +181,7 @@ const EmpleadoDashboard = () => {
       diasVencido: estadoMorosidad.diasVencido
     });
     setOpenPago(true);
-  };
+  }, [todosLosPagos]);
 
   const handleSubmitPago = async () => {
     if (!pagoData.foto) {
@@ -479,74 +488,14 @@ const EmpleadoDashboard = () => {
                       const esMoroso = estadoMorosidad.estado === 'moroso' || estadoMorosidad.estado === 'vencido';
                       
                       return (
-                      <ListItem 
-                        key={cliente.id}
-                        sx={{ 
-                          border: esMoroso ? '2px solid #f44336' : '1px solid #e0e0e0',
-                          borderRadius: 2,
-                          mb: 1,
-                          flexDirection: isMobile ? 'column' : 'row',
-                          alignItems: isMobile ? 'stretch' : 'center',
-                          bgcolor: esMoroso ? 'rgba(244, 67, 54, 0.05)' : 'inherit'
-                        }}
-                      >
-                        <ListItemText
-                          primary={
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Typography 
-                                variant="subtitle1" 
-                                sx={{ 
-                                  fontWeight: 'bold',
-                                  color: esMoroso ? 'error.main' : 'inherit'
-                                }}
-                              >
-                                {cliente.nombre} {cliente.apellido}
-                              </Typography>
-                              {esMoroso && (
-                                <Chip 
-                                  label="MOROSO"
-                                  color="error"
-                                  size="small"
-                                  sx={{ fontWeight: 'bold', fontSize: '0.7rem' }}
-                                />
-                              )}
-                            </Box>
-                          }
-                          secondary={
-                            <Box>
-                              <Typography variant="body2" color="text.secondary">
-                                🏠 Cochera: {cliente.numeroCochera}
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                🕰️ {cliente.modalidadTiempo} {cliente.modalidadTecho}
-                              </Typography>
-                              {cliente.precio && (
-                                <Typography variant="body2" color="primary.main" sx={{ fontWeight: 'bold' }}>
-                                  💵 ${cliente.precio}
-                                </Typography>
-                              )}
-                            </Box>
-                          }
-                          sx={{ mb: isMobile ? 2 : 0 }}
+                        <ClienteItem
+                          key={cliente.id}
+                          cliente={cliente}
+                          estadoMorosidad={estadoMorosidad}
+                          esMoroso={esMoroso}
+                          isMobile={isMobile}
+                          onRegistrarPago={handleRegistrarPago}
                         />
-                        <Button
-                          variant="contained"
-                          color={esMoroso ? 'error' : 'primary'}
-                          onClick={() => handleRegistrarPago(cliente)}
-                          startIcon={<Add />}
-                          fullWidth={isMobile}
-                          sx={{ 
-                            minWidth: isMobile ? 'auto' : 140,
-                            height: 40,
-                            fontWeight: esMoroso ? 'bold' : 'normal'
-                          }}
-                        >
-                          {esMoroso ? 
-                            (isMobile ? 'COBRAR DEUDA' : 'COBRAR') : 
-                            (isMobile ? 'Registrar Pago' : 'Pago')
-                          }
-                        </Button>
-                      </ListItem>
                       );
                     })}
                     
@@ -656,10 +605,12 @@ const EmpleadoDashboard = () => {
               <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
                 📷 Foto del Comprobante *
               </Typography>
-              <CameraCapture
-                onCapture={(foto) => setPagoData({...pagoData, foto})}
-                captured={!!pagoData.foto}
-              />
+              <Suspense fallback={<CircularProgress />}>
+                <CameraCapture
+                  onCapture={(foto) => setPagoData({...pagoData, foto})}
+                  captured={!!pagoData.foto}
+                />
+              </Suspense>
             </Box>
 
             {ubicacion && (

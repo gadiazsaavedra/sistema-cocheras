@@ -8,8 +8,11 @@ import {
   query, 
   where, 
   orderBy,
+  limit,
+  startAfter,
   serverTimestamp 
 } from 'firebase/firestore';
+import { handleFirebaseIndexError } from '../utils/firebaseIndexes';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 // CLIENTES
@@ -43,22 +46,56 @@ const calcularDistanciaLevenshtein = (str1, str2) => {
 };
 
 export const clientesFirestore = {
-  obtener: async (limite = 1000) => {
-    const { limit } = await import('firebase/firestore');
-    const q = limite ? query(collection(db, 'clientes'), limit(limite)) : collection(db, 'clientes');
+  obtener: async (opciones = {}) => {
+    const { limite = 100, ultimoDoc = null, empleadoId = null } = opciones;
+    
+    let q = query(
+      collection(db, 'clientes'),
+      orderBy('fechaCreacion', 'desc'),
+      limit(limite)
+    );
+    
+    // Filtrar por empleado si se especifica
+    if (empleadoId) {
+      q = query(
+        collection(db, 'clientes'),
+        where('empleadoAsignado', '==', empleadoId),
+        orderBy('fechaCreacion', 'desc'),
+        limit(limite)
+      );
+    }
+    
+    // Paginación
+    if (ultimoDoc) {
+      q = query(q, startAfter(ultimoDoc));
+    }
+    
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    
+    return {
+      datos: docs,
+      ultimoDoc: snapshot.docs[snapshot.docs.length - 1] || null,
+      hayMas: snapshot.docs.length === limite
+    };
   },
 
   // Función para verificar duplicados
   verificarDuplicados: async (nombre, apellido, telefono, clienteId = null) => {
     try {
-      const todosClientes = await clientesFirestore.obtener();
+      // Query optimizada por teléfono
+      const qTelefono = query(
+        collection(db, 'clientes'),
+        where('telefono', '==', telefono),
+        limit(5)
+      );
+      const snapshotTelefono = await getDocs(qTelefono);
+      const clientesTelefono = snapshotTelefono.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       
       // Filtrar el cliente actual si estamos editando
       const clientesFiltrados = clienteId ? 
-        todosClientes.filter(c => c.id !== clienteId) : 
-        todosClientes;
+        clientesTelefono.filter(c => c.id !== clienteId) : 
+        clientesTelefono;
       
       // Normalizar texto para comparación
       const normalizar = (texto) => {
@@ -104,6 +141,7 @@ export const clientesFirestore = {
         hayDuplicados: !!duplicadoTelefono || duplicadosNombre.length > 0
       };
     } catch (error) {
+      handleFirebaseIndexError(error);
       console.error('Error verificando duplicados');
       return {
         duplicadoTelefono: null,
@@ -185,8 +223,15 @@ export const pagosFirestore = {
   // Función para verificar duplicados
   verificarDuplicados: async (clienteId, monto, fechaRegistro) => {
     try {
-      const todosPagos = await pagosFirestore.obtener();
-      const pagosCliente = todosPagos.filter(pago => pago.clienteId === clienteId);
+      // Query optimizada por cliente
+      const qCliente = query(
+        collection(db, 'pagos'),
+        where('clienteId', '==', clienteId),
+        orderBy('fechaRegistro', 'desc'),
+        limit(10)
+      );
+      const snapshot = await getDocs(qCliente);
+      const pagosCliente = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       
       const hoy = new Date(fechaRegistro || new Date());
       const inicioHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
@@ -225,11 +270,40 @@ export const pagosFirestore = {
   },
 
   obtener: async (filtros = {}) => {
-    const { limit } = await import('firebase/firestore');
-    const limite = filtros.limite || 1000;
-    const q = query(collection(db, 'pagos'), limit(limite));
+    const { limite = 50, ultimoDoc = null, estado = null, empleadoId = null } = filtros;
+    
+    let q = query(
+      collection(db, 'pagos'),
+      orderBy('fechaRegistro', 'desc'),
+      limit(limite)
+    );
+    
+    // Filtros optimizados
+    if (estado) {
+      q = query(
+        collection(db, 'pagos'),
+        where('estado', '==', estado),
+        orderBy('fechaRegistro', 'desc'),
+        limit(limite)
+      );
+    }
+    
+    if (empleadoId) {
+      q = query(
+        collection(db, 'pagos'),
+        where('empleadoId', '==', empleadoId),
+        orderBy('fechaRegistro', 'desc'),
+        limit(limite)
+      );
+    }
+    
+    // Paginación
+    if (ultimoDoc) {
+      q = query(q, startAfter(ultimoDoc));
+    }
+    
     const snapshot = await getDocs(q);
-    let pagos = snapshot.docs.map(doc => {
+    const pagos = snapshot.docs.map(doc => {
       const data = doc.data();
       return {
         id: doc.id,
@@ -239,23 +313,11 @@ export const pagosFirestore = {
       };
     });
     
-    // Filtrar en memoria para evitar índices
-    if (filtros.estado) {
-      pagos = pagos.filter(pago => pago.estado === filtros.estado);
-    }
-    
-    if (filtros.empleado) {
-      pagos = pagos.filter(pago => pago.empleadoId === filtros.empleado);
-    }
-    
-    // Ordenar por fecha
-    pagos.sort((a, b) => {
-      const fechaA = new Date(a.fechaRegistro || 0);
-      const fechaB = new Date(b.fechaRegistro || 0);
-      return fechaB - fechaA;
-    });
-    
-    return pagos;
+    return {
+      datos: pagos,
+      ultimoDoc: snapshot.docs[snapshot.docs.length - 1] || null,
+      hayMas: snapshot.docs.length === limite
+    };
   },
 
   crear: async (pagoData) => {
@@ -398,8 +460,12 @@ export const aumentosFirestore = {
     return { id: docRef.id, ...aumentoData };
   },
   
-  obtener: async () => {
-    const q = query(collection(db, 'aumentos'), orderBy('fechaCreacion', 'desc'));
+  obtener: async (limite = 20) => {
+    const q = query(
+      collection(db, 'aumentos'), 
+      orderBy('fechaCreacion', 'desc'),
+      limit(limite)
+    );
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({
       id: doc.id,

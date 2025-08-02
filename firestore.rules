@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Reglas para clientes
+    match /clientes/{clienteId} {
+      allow read, write: if request.auth != null;
+      allow create: if request.auth != null && 
+        request.auth.token.email_verified == true;
+    }
+    
+    // Reglas para pagos
+    match /pagos/{pagoId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && 
+        request.auth.token.email_verified == true;
+      allow update: if request.auth != null && 
+        (request.auth.token.admin == true || 
+         request.auth.token.co_admin == true);
+    }
+    
+    // Reglas para configuración (solo admins)
+    match /configuracion/{configId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        (request.auth.token.admin == true || 
+         request.auth.token.co_admin == true);
+    }
+    
+    // Reglas para aumentos (solo admins)
+    match /aumentos/{aumentoId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        (request.auth.token.admin == true || 
+         request.auth.token.co_admin == true);
+    }
+  }
+}

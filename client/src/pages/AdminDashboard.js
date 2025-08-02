@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy, useMemo, useCallback } from 'react';
 import {
   Container,
   Grid,
@@ -26,22 +26,24 @@ import {
   FormControl,
   InputLabel,
   Select,
-  MenuItem
+  MenuItem,
+  CircularProgress
 } from '@mui/material';
 import { CheckCircle, Cancel, Print, Add, Edit, History, Delete, Warning, Visibility, PhotoCamera, Payment, Upload } from '@mui/icons-material';
-import { CircularProgress } from '@mui/material';
 import { pagosFirestore, clientesFirestore, reportesFirestore } from '../services/firestore';
 import ClienteForm from '../components/ClienteForm';
-import TablaPreciosConfig from '../components/TablaPreciosConfig';
-import ReportesAvanzados from '../components/ReportesAvanzados';
 import HistorialPagos from '../components/HistorialPagos';
-import ReporteDisponibilidad from '../components/ReporteDisponibilidad';
-import PagosSinIdentificar from '../components/PagosSinIdentificar';
 import AlertaDuplicados from '../components/AlertaDuplicados';
-import ImportarClientes from '../components/ImportarClientes';
-import GestionPrecios from '../components/GestionPrecios';
-import ExportarClientes from '../components/ExportarClientes';
-import AumentosGraduales from '../components/AumentosGraduales';
+
+// Lazy loading de componentes pesados
+const TablaPreciosConfig = lazy(() => import('../components/TablaPreciosConfig'));
+const ReportesAvanzados = lazy(() => import('../components/ReportesAvanzados'));
+const ReporteDisponibilidad = lazy(() => import('../components/ReporteDisponibilidad'));
+const PagosSinIdentificar = lazy(() => import('../components/PagosSinIdentificar'));
+const ImportarClientes = lazy(() => import('../components/ImportarClientes'));
+const GestionPrecios = lazy(() => import('../components/GestionPrecios'));
+const ExportarClientes = lazy(() => import('../components/ExportarClientes'));
+const AumentosGraduales = lazy(() => import('../components/AumentosGraduales'));
 // import { limpiarClientesPrueba } from '../utils/limpiarDatosPrueba'; // Removido
 import { calcularEstadoCliente, getEstadoTexto } from '../utils/morosidad';
 import moment from 'moment';
@@ -81,6 +83,11 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [filtroOrden, setFiltroOrden] = useState('nombre');
   const [busquedaCliente, setBusquedaCliente] = useState('');
+  
+  // Callback estable para evitar re-renders del TextField
+  const handleBusquedaChange = useCallback((e) => {
+    setBusquedaCliente(e.target.value);
+  }, []);
   const [loadingHistorial, setLoadingHistorial] = useState(false);
   const [openExportarClientes, setOpenExportarClientes] = useState(false);
 
@@ -96,21 +103,20 @@ const AdminDashboard = () => {
     };
   }, [tabValue]);
 
-  const cargarDatos = async () => {
+  const cargarDatos = useCallback(async () => {
     try {
-      // Cargar clientes siempre
-      const clientesRes = await clientesFirestore.obtener();
-      setClientes(clientesRes);
+      // Cargar clientes con paginación
+      const clientesRes = await clientesFirestore.obtener({ limite: 200 });
+      setClientes(clientesRes.datos || clientesRes); // Compatibilidad
       
-      // Cargar pagos siempre
+      // Cargar pagos con límites
       try {
         const [pagosPendientesRes, todosPagosRes] = await Promise.all([
-          pagosFirestore.obtener({ estado: 'pendiente' }),
-          pagosFirestore.obtener()
+          pagosFirestore.obtener({ estado: 'pendiente', limite: 50 }),
+          pagosFirestore.obtener({ limite: 100 })
         ]);
-        console.log('Pagos pendientes cargados:', pagosPendientesRes.length);
-        setPagosPendientes(pagosPendientesRes);
-        setTodosLosPagos(todosPagosRes);
+        setPagosPendientes(pagosPendientesRes.datos || pagosPendientesRes);
+        setTodosLosPagos(todosPagosRes.datos || todosPagosRes);
       } catch (pagosError) {
         console.error('Error cargando pagos:', pagosError);
         setPagosPendientes([]);
@@ -119,7 +125,7 @@ const AdminDashboard = () => {
     } catch (error) {
       console.error('Error cargando datos:', error);
     }
-  };
+  }, []);
 
   const handleConfirmarPago = async (pagoId, accion) => {
     try {
@@ -149,7 +155,7 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleSaveCliente = async (clienteData) => {
+  const handleSaveCliente = useCallback(async (clienteData) => {
     try {
       console.log('Enviando cliente:', clienteData);
       if (clienteEditar) {
@@ -170,7 +176,7 @@ const AdminDashboard = () => {
       console.error('Error response:', error.response?.data);
       setMensaje(`Error guardando cliente: ${error.response?.data?.error || error.message}`);
     }
-  };
+  }, [cargarDatos, clienteEditar]);
 
   const handleEditarCliente = (cliente) => {
     setClienteEditar(cliente);
@@ -297,8 +303,8 @@ const AdminDashboard = () => {
     setLoading(false);
   };
   
-  // Función para filtrar y ordenar clientes
-  const getClientesFiltrados = () => {
+  // Función para filtrar y ordenar clientes - Memoizada para evitar re-cálculos
+  const clientesFiltrados = useMemo(() => {
     let clientesFiltrados = [...clientes];
     
     // Aplicar búsqueda
@@ -353,7 +359,7 @@ const AdminDashboard = () => {
     });
     
     return clientesFiltrados;
-  };
+  }, [clientes, busquedaCliente, filtroOrden, todosLosPagos]);
 
   const imprimirReporte = () => {
     const printContent = `
@@ -404,9 +410,30 @@ const AdminDashboard = () => {
     printWindow.print();
   };
 
+  const TabLoadingFallback = () => (
+    <Box sx={{ 
+      display: 'flex', 
+      justifyContent: 'center', 
+      alignItems: 'center',
+      minHeight: '300px',
+      flexDirection: 'column'
+    }}>
+      <CircularProgress size={40} />
+      <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
+        Cargando módulo...
+      </Typography>
+    </Box>
+  );
+
   const TabPanel = ({ children, value, index }) => (
     <div hidden={value !== index}>
-      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+      {value === index && (
+        <Box sx={{ p: 3 }}>
+          <Suspense fallback={<TabLoadingFallback />}>
+            {children}
+          </Suspense>
+        </Box>
+      )}
     </div>
   );
 
@@ -622,11 +649,14 @@ const AdminDashboard = () => {
                   size="small"
                   placeholder="Buscar cliente..."
                   value={busquedaCliente}
-                  onChange={(e) => setBusquedaCliente(e.target.value)}
+                  onChange={handleBusquedaChange}
                   sx={{ minWidth: 200 }}
                   InputProps={{
                     startAdornment: <Typography sx={{ mr: 1 }}>🔍</Typography>
                   }}
+                  autoComplete="off"
+                  id="busqueda-cliente-field"
+                  key="search-field-stable"
                 />
                 
                 <FormControl size="small" sx={{ minWidth: 150 }}>
@@ -648,10 +678,9 @@ const AdminDashboard = () => {
                 
                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                   <Typography variant="body2" color="text.secondary">
-                    {getClientesFiltrados().length} de {clientes.length} clientes
+                    {clientesFiltrados.length} de {clientes.length} clientes
                   </Typography>
                   {(() => {
-                    const clientesFiltrados = getClientesFiltrados();
                     const morosos = clientesFiltrados.filter(c => c.estadoMorosidad.estado === 'moroso').length;
                     const vencidos = clientesFiltrados.filter(c => c.estadoMorosidad.estado === 'vencido').length;
                     const porVencer = clientesFiltrados.filter(c => c.estadoMorosidad.estado === 'por_vencer').length;
@@ -689,7 +718,7 @@ const AdminDashboard = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {getClientesFiltrados().map((cliente) => (
+                  {clientesFiltrados.map((cliente) => (
                     <TableRow 
                       key={cliente.id}
                       sx={{
@@ -1301,7 +1330,7 @@ const AdminDashboard = () => {
       <ExportarClientes
         open={openExportarClientes}
         onClose={() => setOpenExportarClientes(false)}
-        clientes={getClientesFiltrados()}
+        clientes={clientesFiltrados}
         todosLosPagos={todosLosPagos}
         ordenamiento={{
           nombre: 'Nombre',

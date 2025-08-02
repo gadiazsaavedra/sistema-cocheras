@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { 
@@ -13,8 +13,11 @@ import {
 } from '@mui/material';
 import { useAuth } from './hooks/useAuth';
 import Login from './components/Login';
-import AdminDashboard from './pages/AdminDashboard';
-import EmpleadoDashboard from './pages/EmpleadoDashboard';
+import { preloadByRole } from './utils/preloadComponents';
+
+// Lazy loading de componentes pesados
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const EmpleadoDashboard = lazy(() => import('./pages/EmpleadoDashboard'));
 
 const theme = createTheme({
   palette: {
@@ -174,14 +177,38 @@ function App() {
   );
 }
 
+const LoadingFallback = () => (
+  <Box sx={{ 
+    display: 'flex', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    height: '50vh',
+    flexDirection: 'column'
+  }}>
+    <CircularProgress size={40} />
+    <Typography sx={{ mt: 2 }}>Cargando dashboard...</Typography>
+  </Box>
+);
+
 const DashboardRouter = () => {
   const { role } = useAuth();
   
-  if (role === 'admin' || role === 'co-admin') {
-    return <AdminDashboard />;
-  } else {
-    return <EmpleadoDashboard />;
-  }
+  // Preload componentes basado en rol
+  React.useEffect(() => {
+    if (role) {
+      preloadByRole(role);
+    }
+  }, [role]);
+  
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      {role === 'admin' || role === 'co-admin' ? (
+        <AdminDashboard />
+      ) : (
+        <EmpleadoDashboard />
+      )}
+    </Suspense>
+  );
 };
 
 export default App;
