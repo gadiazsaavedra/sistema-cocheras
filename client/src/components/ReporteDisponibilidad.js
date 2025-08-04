@@ -76,8 +76,10 @@ const ReporteDisponibilidad = () => {
     setCapacidadesActuales(capacidadesTemp);
     // Cerrar modal
     setEditandoCapacidades(false);
-    // Recalcular estadísticas con nuevas capacidades
-    calcularEstadisticas(clientes);
+    // Forzar re-render inmediato
+    setTimeout(() => {
+      calcularEstadisticas(clientes);
+    }, 100);
   };
   
   const cancelarEdicion = () => {
