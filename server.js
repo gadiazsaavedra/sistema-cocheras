@@ -42,10 +42,16 @@ if (!fs.existsSync('./uploads')) {
 
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? ['https://spiffy-flan-5a5eba.netlify.app', 'https://sistema-cocheras-backend.onrender.com']
+    ? ['https://sistema-cocheras.netlify.app', 'https://sistema-cocheras-backend.onrender.com']
     : true,
   credentials: true
 }));
+
+// Log todas las peticiones
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  next();
+});
 app.use(express.json());
 app.use(express.static('client/build'));
 app.use('/uploads', express.static('uploads')); // Servir fotos locales
