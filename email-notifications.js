@@ -37,7 +37,7 @@ async function enviarNotificacionPagoPendiente(pagoData) {
           
           <div style="background: white; padding: 15px; border-radius: 5px; margin: 10px 0;">
             <p><strong>👤 Cliente:</strong> ${pagoData.clienteNombre}</p>
-            <p><strong>💰 Monto:</strong> $${pagoData.monto?.toLocaleString()}</p>
+            <p><strong>💰 Monto:</strong> $${Number(pagoData.monto)?.toLocaleString()}</p>
             <p><strong>💳 Tipo:</strong> ${pagoData.tipoPago}</p>
             <p><strong>👨‍💼 Empleado:</strong> ${pagoData.empleadoNombre}</p>
             <p><strong>📅 Fecha:</strong> ${new Date().toLocaleString('es-AR')}</p>
@@ -66,7 +66,7 @@ async function enviarNotificacionPagoPendiente(pagoData) {
       await transporter.sendMail({
         from: `"Sistema Cocheras" <${process.env.EMAIL_USER}>`,
         to: email,
-        subject: `🔔 Nuevo Pago Pendiente - ${pagoData.clienteNombre} ($${pagoData.monto})`,
+        subject: `🔔 Nuevo Pago Pendiente - ${pagoData.clienteNombre} ($${Number(pagoData.monto)?.toLocaleString()})`,
         html: emailContent
       });
     }
