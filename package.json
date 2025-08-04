@@ -1,28 +1,41 @@
 {
-  "name": "sistema-cocheras",
+  "name": "sistema-cocheras-backend",
   "version": "1.0.0",
-  "description": "Sistema de gestión de cocheras con control anti-fraude",
+  "description": "Sistema de gestión de cocheras con backup automático",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "build": "npm run build:client",
-    "build:client": "cd client && npm run build",
+    "backup": "node backup-system.js backup",
+    "backup-restore": "node backup-system.js restore",
+    "backup-list": "node backup-system.js list",
+    "backup-scheduler": "node backup-scheduler.js start",
+    "backup-manual": "node backup-scheduler.js manual",
+    "backup-status": "node backup-scheduler.js status",
     "migrate": "node migrations/run-migrations.js",
-    "backup": "node -e \"const admin=require('firebase-admin');const BackupSystem=require('./backup-system');const serviceAccount=require('./firebase-service-account.json');admin.initializeApp({credential:admin.credential.cert(serviceAccount)});(async()=>{const backup=new BackupSystem();await backup.createBackup();process.exit(0);})();\"",
     "setup-empleados": "node setup-empleados.js",
-    "deploy": "./deploy.sh"
+    "deploy": "npm run build && npm run migrate"
   },
   "dependencies": {
-    "@google-cloud/firestore": "^7.11.3",
+    "@sentry/integrations": "^7.114.0",
+    "@sentry/node": "^10.0.0",
     "cors": "^2.8.5",
     "express": "^4.18.2",
-    "firebase-admin": "^11.11.0",
+    "firebase-admin": "^11.10.1",
     "moment": "^2.29.4",
-    "multer": "^1.4.4",
-    "node-cron": "^3.0.2"
+    "multer": "^1.4.5-lts.1",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^7.0.5"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
-  }
+  },
+  "keywords": [
+    "cocheras",
+    "firebase",
+    "backup",
+    "nodejs"
+  ],
+  "author": "gadiazsaavedra",
+  "license": "ISC"
 }
