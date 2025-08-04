@@ -178,6 +178,8 @@ app.get('/api/pagos', authenticateToken, async (req, res) => {
 app.post('/api/pagos', authenticateToken, async (req, res) => {
   try {
     console.log('📥 Recibiendo pago:', req.body);
+    console.log('💰 Monto original:', req.body.monto, 'tipo:', typeof req.body.monto);
+    console.log('💰 Monto parseado:', parseFloat(req.body.monto));
     
     const pagoData = {
       ...req.body,
