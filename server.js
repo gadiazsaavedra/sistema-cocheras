@@ -184,8 +184,14 @@ app.post('/api/pagos', authenticateToken, async (req, res) => {
       monto: parseFloat(req.body.monto),
       empleadoId: req.user.uid,
       fechaRegistro: admin.firestore.FieldValue.serverTimestamp(),
-      estado: 'pendiente'
+      estado: req.body.empleadoNombre?.includes('ADMIN') ? 'confirmado' : 'pendiente'
     };
+    
+    // Si es pago directo de admin, agregar datos de confirmación
+    if (req.body.empleadoNombre?.includes('ADMIN')) {
+      pagoData.fechaConfirmacion = admin.firestore.FieldValue.serverTimestamp();
+      pagoData.confirmadoPor = req.user.uid;
+    }
     
     console.log('💾 Guardando pago en Firestore...');
     const docRef = await db.collection('pagos').add(pagoData);
