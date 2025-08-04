@@ -7,18 +7,18 @@ const cron = require('node-cron');
 const path = require('path');
 const fs = require('fs');
 // const backupRouter = require('./backup-api');
-const { 
-  initSentryBackend, 
-  sentryRequestHandler, 
-  sentryErrorHandler, 
-  captureError, 
-  captureMessage,
-  setUser 
-} = require('./error-monitoring');
+// const { 
+//   initSentryBackend, 
+//   sentryRequestHandler, 
+//   sentryErrorHandler, 
+//   captureError, 
+//   captureMessage,
+//   setUser 
+// } = require('./error-monitoring');
 const { enviarNotificacionPagoPendiente, enviarResumenDiario } = require('./email-notifications');
 
 // Inicializar Sentry
-initSentryBackend();
+// initSentryBackend();
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -38,7 +38,7 @@ if (!fs.existsSync('./uploads')) {
 }
 
 // Sentry request handler (debe ir antes de otras rutas)
-app.use(sentryRequestHandler());
+// app.use(sentryRequestHandler());
 
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
@@ -53,7 +53,7 @@ app.use('/uploads', express.static('uploads')); // Servir fotos locales
 // Rutas de backup
 // app.use('/api/backup', backupRouter);
 
-// Middleware de autenticación con Sentry
+// Middleware de autenticación
 const authenticateToken = async (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Token requerido' });
@@ -61,13 +61,9 @@ const authenticateToken = async (req, res, next) => {
   try {
     const decodedToken = await admin.auth().verifyIdToken(token);
     req.user = decodedToken;
-    
-    // Configurar usuario en Sentry
-    setUser(decodedToken);
-    
     next();
   } catch (error) {
-    captureError(error, { context: 'authentication', token: token?.substring(0, 10) + '...' });
+    console.error('Error de autenticación:', error);
     res.status(403).json({ error: 'Token inválido' });
   }
 };
@@ -108,7 +104,7 @@ app.get('/api/clientes', authenticateToken, async (req, res) => {
     const clientes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     res.json(clientes);
   } catch (error) {
-    captureError(error, { endpoint: '/api/clientes', method: 'GET', user: req.user?.email });
+    console.error('Error en /api/clientes:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -425,13 +421,13 @@ app.get('*', (req, res) => {
 });
 
 // Sentry error handler (debe ir al final, antes de listen)
-app.use(sentryErrorHandler());
+// app.use(sentryErrorHandler());
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Servidor ejecutándose en puerto ${PORT}`);
   if (process.env.NODE_ENV === 'production') {
     console.log(`Servidor en producción: https://sistema-cocheras-backend.onrender.com`);
-    captureMessage('Servidor iniciado en producción', 'info', { port: PORT });
+    console.log('Servidor iniciado en producción');
   } else {
     console.log(`Acceso local: http://localhost:${PORT}`);
     console.log(`Acceso red: http://[TU_IP]:${PORT}`);
