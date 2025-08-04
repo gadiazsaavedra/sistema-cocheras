@@ -56,23 +56,27 @@ const GestionPrecios = () => {
   const cargarClientes = async () => {
     try {
       const response = await clientesFirestore.obtener();
-      setClientes(response);
+      const clientesData = response.datos || response || [];
+      setClientes(clientesData);
     } catch (error) {
       console.error('Error cargando clientes:', error);
+      setClientes([]);
     }
   };
 
   const cargarHistorial = async () => {
     try {
       const response = await aumentosFirestore.obtener();
-      setHistorialAumentos(response);
+      const historialData = response.datos || response || [];
+      setHistorialAumentos(historialData);
     } catch (error) {
       console.error('Error cargando historial:', error);
+      setHistorialAumentos([]);
     }
   };
 
   const calcularClientesAfectados = () => {
-    let filtrados = [...clientes];
+    let filtrados = [...(clientes || [])];
 
     // Filtrar por categoría
     if (aumentoConfig.categoria === 'vehiculo' && aumentoConfig.subcategoria) {

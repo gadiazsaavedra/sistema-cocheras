@@ -1,19 +1,23 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
+import { getAuth, connectAuthEmulator } from 'firebase/auth';
+import { getFirestore, connectFirestoreEmulator, initializeFirestore } from 'firebase/firestore';
+import { getStorage, connectStorageEmulator } from 'firebase/storage';
 
 const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.REACT_APP_FIREBASE_APP_ID
+  apiKey: "AIzaSyDAVUYctXW-fZ_nLDXbDnuMmvVCK_6WEzE",
+  authDomain: "sistema-cocheras.firebaseapp.com",
+  projectId: "sistema-cocheras",
+  storageBucket: "sistema-cocheras.appspot.com",
+  messagingSenderId: "590187004191",
+  appId: "1:590187004191:web:8c8f9c8f9c8f9c8f9c8f9c"
 };
 
+// Inicializar Firebase
 const app = initializeApp(firebaseConfig);
+
+// Inicializar servicios
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+
 export default app;

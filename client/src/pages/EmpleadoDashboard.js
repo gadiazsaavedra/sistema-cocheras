@@ -39,9 +39,12 @@ import {
   Add
 } from '@mui/icons-material';
 import { clientesFirestore, pagosFirestore } from '../services/firestore';
+import { auth } from '../services/firebase';
 import { useAuth } from '../hooks/useAuth';
 import { calcularEstadoCliente, getEstadoTexto } from '../utils/morosidad';
 import ClienteItem from '../components/MemoizedClienteItem';
+import { getVersionDisplay } from '../utils/version';
+import VersionInfo from '../components/VersionInfo';
 
 // Lazy loading del componente de cámara
 const CameraCapture = lazy(() => import('../components/CameraCapture'));
@@ -78,30 +81,46 @@ const EmpleadoDashboard = () => {
     precio: ''
   });
   const [busquedaCliente, setBusquedaCliente] = useState('');
+  const [showVersionInfo, setShowVersionInfo] = useState(false);
 
   useEffect(() => {
-    cargarClientes();
-    cargarPagos();
-    obtenerUbicacion();
-    
-    // Recargar datos cada 10 segundos para mantener actualizado
-    const interval = setInterval(() => {
+    if (user?.email) {
       cargarClientes();
       cargarPagos();
-    }, 10000);
-    
-    return () => clearInterval(interval);
-  }, [cargarClientes, cargarPagos]);
+    }
+    obtenerUbicacion();
+  }, [user]);
 
-  const cargarClientes = useCallback(async () => {
+  const cargarClientes = async () => {
     setLoadingClientes(true);
+    
     try {
-      const response = await clientesFirestore.obtener({ 
-        empleadoId: user?.uid,
-        limite: 100 
-      });
-      const clientesData = response.datos || response;
-      setClientes(clientesData);
+      const response = await clientesFirestore.obtener({ limite: 100 });
+      const todosClientes = response.datos || response;
+      
+      console.log('Todos los clientes:', todosClientes);
+      console.log('Usuario email:', user?.email);
+      
+      // Debug: ver todos los empleadoAsignado únicos
+      const empleadosUnicos = [...new Set(todosClientes.map(c => c.empleadoAsignado).filter(Boolean))];
+      console.log('Empleados asignados únicos:', empleadosUnicos);
+      
+      // Si no hay clientes asignados específicamente, mostrar todos
+      const hayAsignaciones = todosClientes.some(c => c.empleadoAsignado && c.empleadoAsignado.trim());
+      
+      const clientesFiltrados = hayAsignaciones ? 
+        todosClientes.filter(cliente => {
+          const empleadoAsignado = cliente.empleadoAsignado;
+          const userEmail = user?.email;
+          const userName = userEmail?.split('@')[0];
+          
+          return empleadoAsignado === userEmail || 
+                 empleadoAsignado === userName;
+        }) : 
+        todosClientes; // Mostrar todos si no hay asignaciones
+      
+      console.log('Clientes filtrados:', clientesFiltrados);
+      setClientes(clientesFiltrados);
     } catch (error) {
       console.error('Error cargando clientes:', error);
       setMensaje('Error cargando clientes');
@@ -109,9 +128,9 @@ const EmpleadoDashboard = () => {
     } finally {
       setLoadingClientes(false);
     }
-  }, [user?.uid]);
+  };
 
-  const cargarPagos = useCallback(async () => {
+  const cargarPagos = async () => {
     try {
       const response = await pagosFirestore.obtener({ 
         empleadoId: user?.uid,
@@ -122,7 +141,7 @@ const EmpleadoDashboard = () => {
     } catch (error) {
       console.error('Error cargando pagos:', error);
     }
-  }, [user?.uid]);
+  };
 
   const obtenerUbicacion = () => {
     if (navigator.geolocation) {
@@ -136,19 +155,20 @@ const EmpleadoDashboard = () => {
         },
         (error) => {
           console.error('Error obteniendo ubicación:', error);
-          // Para desarrollo, usar ubicación simulada
-          if (window.location.hostname !== 'localhost') {
+          // Usar ubicación simulada solo en desarrollo
+          if (window.location.hostname === 'localhost') {
             setUbicacion({
               lat: -34.6037,
               lng: -58.3816,
               timestamp: Date.now(),
               simulada: true
             });
-            setMensaje('📍 Usando ubicación simulada (Buenos Aires)');
+            setMensaje('📍 Usando ubicación simulada (desarrollo)');
+            setSnackbarOpen(true);
           } else {
-            setMensaje('No se pudo obtener la ubicación. Verifique los permisos.');
+            setMensaje('❌ No se pudo obtener la ubicación GPS. Verifique los permisos del navegador.');
+            setSnackbarOpen(true);
           }
-          setSnackbarOpen(true);
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
       );
@@ -183,6 +203,51 @@ const EmpleadoDashboard = () => {
     setOpenPago(true);
   }, [todosLosPagos]);
 
+  // Función para comprimir y convertir File a base64
+  const fileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      
+      img.onload = () => {
+        // Redimensionar para mantener bajo 800KB
+        const maxWidth = 800;
+        const maxHeight = 600;
+        let { width, height } = img;
+        
+        if (width > height) {
+          if (width > maxWidth) {
+            height = (height * maxWidth) / width;
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = (width * maxHeight) / height;
+            height = maxHeight;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Comprimir a 0.7 de calidad
+        const base64 = canvas.toDataURL('image/jpeg', 0.7);
+        resolve(base64);
+      };
+      
+      img.onerror = reject;
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleSubmitPago = async () => {
     if (!pagoData.foto) {
       setMensaje('Debe tomar una foto del comprobante');
@@ -206,16 +271,74 @@ const EmpleadoDashboard = () => {
 
     setLoading(true);
     try {
+      // Validaciones adicionales
+      if (!selectedCliente?.id) {
+        throw new Error('Cliente no válido');
+      }
+      
+      if (!pagoData.monto || parseFloat(pagoData.monto) <= 0) {
+        throw new Error('Monto no válido');
+      }
+      
+      if (!user?.uid) {
+        throw new Error('Usuario no autenticado');
+      }
+
+      // Convertir foto a base64 si es un objeto File
+      let fotoBase64 = pagoData.foto;
+      if (pagoData.foto instanceof File) {
+        fotoBase64 = await fileToBase64(pagoData.foto);
+      }
+
       const pagoDataFirestore = {
         clienteId: selectedCliente.id,
         clienteNombre: `${selectedCliente.nombre} ${selectedCliente.apellido}`,
-        monto: pagoData.monto,
+        monto: parseFloat(pagoData.monto),
         tipoPago: pagoData.tipoPago,
-        ubicacion,
-        foto: pagoData.foto
+        empleadoId: user.uid,
+        empleadoNombre: user.email,
+        fechaRegistro: new Date().toISOString(),
+        estado: 'pendiente',
+        ubicacion: ubicacion || { lat: 0, lng: 0, error: 'Sin GPS' },
+        fotoBase64: fotoBase64
       };
 
-      await pagosFirestore.crear(pagoDataFirestore);
+      console.log('Enviando pago con foto convertida');
+      
+      let resultado;
+      
+      try {
+        // Intentar usar API del backend para notificaciones por email
+        const apiUrl = window.location.hostname.includes('netlify.app') 
+          ? 'https://sistema-cocheras-backend.onrender.com/api'
+          : 'http://localhost:3000/api';
+        
+        const currentUser = auth.currentUser;
+        const token = await currentUser.getIdToken();
+        
+        const response = await fetch(`${apiUrl}/pagos`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(pagoDataFirestore)
+        });
+        
+        if (response.ok) {
+          resultado = await response.json();
+          console.log('Pago creado con notificación por email:', resultado);
+        } else {
+          throw new Error('API no disponible');
+        }
+      } catch (apiError) {
+        console.log('API no disponible, usando Firestore directo:', apiError.message);
+        
+        // Fallback: usar Firestore directo
+        resultado = await pagosFirestore.crear(pagoDataFirestore);
+        console.log('Pago creado sin notificación:', resultado);
+      }
+      
       setMensaje('✅ Pago registrado exitosamente. Pendiente de confirmación.');
       setSnackbarOpen(true);
       setOpenPago(false);
@@ -223,15 +346,25 @@ const EmpleadoDashboard = () => {
       
       // Recargar datos inmediatamente para actualizar estados
       await Promise.all([cargarClientes(), cargarPagos()]);
-      
-      // Recargar nuevamente después de 2 segundos por si hay delay en el servidor
-      setTimeout(() => {
-        cargarClientes();
-        cargarPagos();
-      }, 2000);
     } catch (error) {
       console.error('Error completo:', error);
-      setMensaje(`❌ Error: ${error.message || 'Error registrando pago. Intente nuevamente.'}`);
+      console.error('Error stack:', error.stack);
+      
+      let mensajeError = 'Error registrando pago';
+      
+      if (error.message?.includes('permission')) {
+        mensajeError = 'Sin permisos para registrar pagos';
+      } else if (error.message?.includes('network')) {
+        mensajeError = 'Error de conexión. Verifique su internet';
+      } else if (error.message?.includes('auth')) {
+        mensajeError = 'Error de autenticación. Vuelva a iniciar sesión';
+      } else if (error.message?.includes('invalid data')) {
+        mensajeError = 'Error procesando la foto. Intente tomar otra foto';
+      } else if (error.message) {
+        mensajeError = error.message;
+      }
+      
+      setMensaje(`❌ ${mensajeError}`);
       setSnackbarOpen(true);
     }
     setLoading(false);
@@ -307,6 +440,13 @@ const EmpleadoDashboard = () => {
               sx={{ mr: 1 }}
             />
           )}
+          <Chip 
+            label={getVersionDisplay()}
+            size="small"
+            clickable
+            onClick={() => setShowVersionInfo(true)}
+            sx={{ mr: 1, bgcolor: 'rgba(255,255,255,0.2)', color: 'white', cursor: 'pointer' }}
+          />
           <IconButton color="inherit" onClick={handleLogout}>
             <Logout />
           </IconButton>
@@ -789,6 +929,12 @@ const EmpleadoDashboard = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Dialog de información de versión */}
+      <VersionInfo 
+        open={showVersionInfo} 
+        onClose={() => setShowVersionInfo(false)} 
+      />
     </Box>
   );
 };

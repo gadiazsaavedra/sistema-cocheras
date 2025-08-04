@@ -14,6 +14,8 @@ import {
 import { useAuth } from './hooks/useAuth';
 import Login from './components/Login';
 import { preloadByRole } from './utils/preloadComponents';
+// import { setUserContext, clearUserContext, SentryErrorBoundary } from './utils/errorMonitoring';
+import { getVersionDisplay } from './utils/version';
 
 // Lazy loading de componentes pesados
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
@@ -93,6 +95,9 @@ const AppLayout = ({ children }) => {
                 - {role === 'admin' ? 'Administrador' : 'Co-Administrador'}
               </Typography>
             )}
+            <Typography component="span" sx={{ ml: 2, opacity: 0.7, fontSize: '0.8rem' }}>
+              {getVersionDisplay()}
+            </Typography>
           </Typography>
           {user && (
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -191,7 +196,7 @@ const LoadingFallback = () => (
 );
 
 const DashboardRouter = () => {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   
   // Preload componentes basado en rol
   React.useEffect(() => {
@@ -200,14 +205,25 @@ const DashboardRouter = () => {
     }
   }, [role]);
   
+  // Configurar usuario en Sentry (desactivado)
+  // React.useEffect(() => {
+  //   if (user) {
+  //     setUserContext({ uid: user.uid, email: user.email, role });
+  //   } else {
+  //     clearUserContext();
+  //   }
+  // }, [user, role]);
+  
   return (
-    <Suspense fallback={<LoadingFallback />}>
-      {role === 'admin' || role === 'co-admin' ? (
-        <AdminDashboard />
-      ) : (
-        <EmpleadoDashboard />
-      )}
-    </Suspense>
+    <div>
+      <Suspense fallback={<LoadingFallback />}>
+        {role === 'admin' || role === 'co-admin' ? (
+          <AdminDashboard />
+        ) : (
+          <EmpleadoDashboard />
+        )}
+      </Suspense>
+    </div>
   );
 };
 

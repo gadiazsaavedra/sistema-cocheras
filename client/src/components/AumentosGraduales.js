@@ -38,7 +38,8 @@ const AumentosGraduales = () => {
 
   const cargarDatos = async () => {
     try {
-      const clientes = await clientesFirestore.obtener();
+      const response = await clientesFirestore.obtener();
+      const clientes = response.datos || response || [];
       const hoy = new Date();
       
       // Filtrar clientes con aumentos graduales
@@ -52,6 +53,8 @@ const AumentosGraduales = () => {
     } catch (error) {
       console.error('Error cargando datos:', error);
       setMensaje('❌ Error cargando datos');
+      setClientesConAumentos([]);
+      setClientesPendientes([]);
     }
   };
 

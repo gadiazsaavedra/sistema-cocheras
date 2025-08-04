@@ -9,7 +9,7 @@ import {
 } from '@mui/material';
 import { Add, Payment } from '@mui/icons-material';
 
-const ClienteItem = React.memo(({ 
+const ClienteItem = ({ 
   cliente, 
   estadoMorosidad, 
   esMoroso, 
@@ -85,8 +85,6 @@ const ClienteItem = React.memo(({
       </Button>
     </ListItem>
   );
-});
-
-ClienteItem.displayName = 'ClienteItem';
+};
 
 export default ClienteItem;

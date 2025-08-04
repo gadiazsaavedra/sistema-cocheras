@@ -6,21 +6,23 @@ const urlsToCache = [
   '/manifest.json'
 ];
 
+// Instalar Service Worker
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(urlsToCache))
+      .then((cache) => {
+        return cache.addAll(urlsToCache);
+      })
   );
 });
 
+// Interceptar requests
 self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request)
       .then((response) => {
-        if (response) {
-          return response;
-        }
-        return fetch(event.request);
+        // Devolver desde cache si existe, sino fetch de red
+        return response || fetch(event.request);
       }
     )
   );

@@ -44,6 +44,7 @@ const ImportarClientes = lazy(() => import('../components/ImportarClientes'));
 const GestionPrecios = lazy(() => import('../components/GestionPrecios'));
 const ExportarClientes = lazy(() => import('../components/ExportarClientes'));
 const AumentosGraduales = lazy(() => import('../components/AumentosGraduales'));
+const AumentosTrimestrales = lazy(() => import('../components/AumentosTrimestrales'));
 // import { limpiarClientesPrueba } from '../utils/limpiarDatosPrueba'; // Removido
 import { calcularEstadoCliente, getEstadoTexto } from '../utils/morosidad';
 import moment from 'moment';
@@ -96,7 +97,8 @@ const AdminDashboard = () => {
     // Solo recargar en tab de pagos pendientes
     let interval;
     if (tabValue === 0) {
-      interval = setInterval(cargarDatos, 5000);
+      // Auto-refresh desactivado para evitar flickering
+      // interval = setInterval(cargarDatos, 5000);
     }
     return () => {
       if (interval) clearInterval(interval);
@@ -111,12 +113,19 @@ const AdminDashboard = () => {
       
       // Cargar pagos con límites
       try {
-        const [pagosPendientesRes, todosPagosRes] = await Promise.all([
-          pagosFirestore.obtener({ estado: 'pendiente', limite: 50 }),
-          pagosFirestore.obtener({ limite: 100 })
-        ]);
-        setPagosPendientes(pagosPendientesRes.datos || pagosPendientesRes);
-        setTodosLosPagos(todosPagosRes.datos || todosPagosRes);
+        // Obtener todos los pagos y filtrar localmente
+        const todosPagosRes = await pagosFirestore.obtener({ limite: 100 });
+        const todosPagos = todosPagosRes.datos || todosPagosRes;
+        
+        // Filtrar pagos pendientes localmente
+        const pagosPendientes = todosPagos.filter(pago => pago.estado === 'pendiente');
+        
+        console.log('Pagos pendientes cargados:', pagosPendientes.length);
+        console.log('Todos los pagos cargados:', todosPagos.length);
+        console.log('Últimos 3 pagos:', todosPagos.slice(0, 3));
+        
+        setPagosPendientes(pagosPendientes);
+        setTodosLosPagos(todosPagos);
       } catch (pagosError) {
         console.error('Error cargando pagos:', pagosError);
         setPagosPendientes([]);
@@ -136,7 +145,8 @@ const AdminDashboard = () => {
       await cargarDatos();
       
       // Recargar nuevamente después de 2 segundos para asegurar actualización
-      setTimeout(cargarDatos, 2000);
+      // setTimeout desactivado para evitar flickering
+      // setTimeout(cargarDatos, 2000);
       
       setSelectedPago(null);
     } catch (error) {
@@ -265,24 +275,46 @@ const AdminDashboard = () => {
     
     setLoading(true);
     try {
+      console.log('💰 FRONTEND - Monto original:', pagoDirectoData.monto, 'tipo:', typeof pagoDirectoData.monto);
+      console.log('💰 FRONTEND - Monto parseado:', parseFloat(pagoDirectoData.monto));
+      
       const pagoData = {
         clienteId: clientePagoDirecto.id,
         clienteNombre: `${clientePagoDirecto.nombre} ${clientePagoDirecto.apellido}`,
         monto: parseFloat(pagoDirectoData.monto),
         tipoPago: pagoDirectoData.tipoPago,
-        observaciones: pagoDirectoData.observaciones,
-        ubicacion: { lat: 0, lng: 0 },
-        fotoBase64: null,
-        empleadoId: 'admin',
-        empleadoNombre: 'ADMIN - Pago Directo',
-        fechaRegistro: new Date().toISOString(),
-        estado: 'confirmado',
-        fechaConfirmacion: new Date().toISOString(),
-        confirmadoPor: 'admin',
-        tipoRegistro: 'pago_directo'
+        observaciones: pagoDirectoData.observaciones || 'Pago directo - Admin',
+        ubicacion: { lat: 0, lng: 0, admin: true },
+        fotoBase64: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+        empleadoNombre: 'ADMIN - Pago Directo'
       };
       
-      await pagosFirestore.crear(pagoData);
+      console.log('📦 FRONTEND - Datos a enviar:', pagoData);
+      
+      // Usar API del backend para consistencia
+      const apiUrl = window.location.hostname.includes('netlify.app') 
+        ? 'https://sistema-cocheras-backend.onrender.com/api'
+        : 'http://localhost:3000/api';
+      
+      const { getAuth } = await import('firebase/auth');
+      const auth = getAuth();
+      const user = auth.currentUser;
+      const token = await user.getIdToken();
+      
+      const response = await fetch(`${apiUrl}/pagos`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(pagoData)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Error del servidor: ${response.status}`);
+      }
+      
+      await response.json();
       
       setMensaje('✅ Pago directo registrado y aprobado exitosamente');
       setOpenPagoDirecto(false);
@@ -292,9 +324,6 @@ const AdminDashboard = () => {
       
       // Recargar datos inmediatamente
       await cargarDatos();
-      
-      // Recargar nuevamente después de 2 segundos
-      setTimeout(cargarDatos, 2000);
       
     } catch (error) {
       console.error('Error registrando pago directo:', error);
@@ -462,6 +491,7 @@ const AdminDashboard = () => {
           <Tab label="Configuración de Precios" />
           <Tab label="Gestión de Precios" />
           <Tab label="Aumentos Graduales" />
+          <Tab label="Aumentos Trimestrales" />
           <Tab label="Reportes Avanzados" />
           <Tab label="Reportes Básicos" />
         </Tabs>
@@ -548,7 +578,7 @@ const AdminDashboard = () => {
         <Card>
           <CardContent>
             <Typography variant="h6" gutterBottom>
-              Gestión de Clientes ({getClientesFiltrados().length}/{clientes.length})
+              Gestión de Clientes ({clientesFiltrados.length}/{clientes.length})
             </Typography>
             <Box sx={{ mb: 3 }}>
               {/* Botones principales */}
@@ -626,7 +656,8 @@ const AdminDashboard = () => {
                           // Recargar datos inmediatamente
                           await cargarDatos();
                           // Recargar nuevamente después de 1 segundo
-                          setTimeout(cargarDatos, 1000);
+                          // setTimeout desactivado para evitar flickering
+                          // setTimeout(cargarDatos, 1000);
                         } else {
                           setMensaje(`❌ Error: ${result.error || 'Error eliminando historial'}`);
                         }
@@ -842,10 +873,14 @@ const AdminDashboard = () => {
       </TabPanel>
 
       <TabPanel value={tabValue} index={7}>
-        <ReportesAvanzados />
+        <AumentosTrimestrales />
       </TabPanel>
 
       <TabPanel value={tabValue} index={8}>
+        <ReportesAvanzados />
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={9}>
         <Card>
           <CardContent>
             <Typography variant="h6" gutterBottom>
@@ -1245,11 +1280,13 @@ const AdminDashboard = () => {
                 label="Monto del Pago *"
                 type="number"
                 value={pagoDirectoData.monto}
-                onChange={(e) => setPagoDirectoData({...pagoDirectoData, monto: e.target.value})}
+                onChange={(e) => {
+                  setPagoDirectoData({...pagoDirectoData, monto: e.target.value});
+                }}
                 placeholder={clientePagoDirecto.precio?.toString()}
                 helperText={`Precio sugerido: $${clientePagoDirecto.precio?.toLocaleString()}`}
                 sx={{ mb: 2 }}
-                inputProps={{ min: 0, step: 1000 }}
+                inputProps={{ min: 0, step: 1 }}
               />
               
               <FormControl fullWidth sx={{ mb: 2 }}>
@@ -1281,11 +1318,15 @@ const AdminDashboard = () => {
             variant="contained"
             color="success"
             onClick={handlePagoDirecto}
-            disabled={!pagoDirectoData.monto}
-            startIcon={<Payment />}
+            disabled={!pagoDirectoData.monto || loading}
+            startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <Payment />}
             size="large"
+            sx={{
+              minWidth: 220,
+              position: 'relative'
+            }}
           >
-            💰 Registrar y Aprobar Pago
+            {loading ? 'Procesando...' : '💰 Registrar y Aprobar Pago'}
           </Button>
           <Button
             variant="outlined"

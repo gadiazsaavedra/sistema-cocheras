@@ -10,7 +10,9 @@ import {
   orderBy,
   limit,
   startAfter,
-  serverTimestamp 
+  serverTimestamp,
+  disableNetwork,
+  enableNetwork
 } from 'firebase/firestore';
 import { handleFirebaseIndexError } from '../utils/firebaseIndexes';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -57,12 +59,26 @@ export const clientesFirestore = {
     
     // Filtrar por empleado si se especifica
     if (empleadoId) {
-      q = query(
-        collection(db, 'clientes'),
-        where('empleadoAsignado', '==', empleadoId),
-        orderBy('fechaCreacion', 'desc'),
-        limit(limite)
-      );
+      try {
+        // Primero intentar buscar por empleadoAsignado (email)
+        const user = auth.currentUser;
+        const empleadoEmail = user?.email;
+        
+        q = query(
+          collection(db, 'clientes'),
+          where('empleadoAsignado', '==', empleadoEmail),
+          orderBy('fechaCreacion', 'desc'),
+          limit(limite)
+        );
+      } catch (error) {
+        console.error('Error creando query de empleado:', error);
+        // Fallback: obtener todos los clientes
+        q = query(
+          collection(db, 'clientes'),
+          orderBy('fechaCreacion', 'desc'),
+          limit(limite)
+        );
+      }
     }
     
     // Paginación
@@ -321,41 +337,75 @@ export const pagosFirestore = {
   },
 
   crear: async (pagoData) => {
-    const user = auth.currentUser;
-    if (!user) throw new Error('Usuario no autenticado');
-
-    // Iniciando creación de pago
-
-    // Comprimir y guardar foto como base64
-    let fotoBase64 = null;
-    if (pagoData.foto) {
-      try {
-        fotoBase64 = await comprimirImagen(pagoData.foto);
-      } catch (error) {
-        console.error('Error procesando foto');
-        fotoBase64 = null;
-      }
-    }
-
     try {
-      const docRef = await addDoc(collection(db, 'pagos'), {
+      const user = auth.currentUser;
+      if (!user) {
+        throw new Error('Usuario no autenticado');
+      }
+
+      // Validar datos requeridos
+      if (!pagoData.clienteId) {
+        throw new Error('ID de cliente requerido');
+      }
+      
+      if (!pagoData.monto || parseFloat(pagoData.monto) <= 0) {
+        throw new Error('Monto inválido');
+      }
+
+      // Usar foto directamente como base64 si ya viene procesada
+      let fotoBase64 = pagoData.fotoBase64 || pagoData.foto;
+      
+      // Si es un archivo, convertir a base64 simple
+      if (pagoData.foto && typeof pagoData.foto === 'object' && pagoData.foto.constructor === File) {
+        try {
+          fotoBase64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(pagoData.foto);
+          });
+        } catch (error) {
+          console.warn('Error procesando foto, continuando sin foto');
+          fotoBase64 = null;
+        }
+      }
+
+      const pagoFirestore = {
         clienteId: pagoData.clienteId,
-        clienteNombre: pagoData.clienteNombre,
-        monto: parseFloat(pagoData.monto) || 0,
+        clienteNombre: pagoData.clienteNombre || 'Cliente',
+        monto: parseFloat(pagoData.monto),
         tipoPago: pagoData.tipoPago || 'efectivo',
-        ubicacion: pagoData.ubicacion || { lat: 0, lng: 0 },
-        fotoBase64: fotoBase64 || null,
-        empleadoId: user.uid,
-        empleadoNombre: user.email,
+        ubicacion: pagoData.ubicacion || { lat: 0, lng: 0, error: 'Sin GPS' },
+        fotoBase64: fotoBase64,
+        empleadoId: pagoData.empleadoId || user.uid,
+        empleadoNombre: pagoData.empleadoNombre || user.email,
         fechaRegistro: serverTimestamp(),
         estado: 'pendiente'
-      });
+      };
+
+      console.log('Creando pago en Firestore...');
+      const docRef = await addDoc(collection(db, 'pagos'), pagoFirestore);
       
-      // Pago creado exitosamente
-      return { id: docRef.id, ...pagoData };
-    } catch (firestoreError) {
-      console.error('Error guardando en Firestore');
-      throw new Error('Error guardando pago');
+      console.log('Pago creado con ID:', docRef.id);
+      return { 
+        id: docRef.id, 
+        ...pagoFirestore,
+        fechaRegistro: new Date().toISOString()
+      };
+      
+    } catch (error) {
+      console.error('Error en pagosFirestore.crear:', error);
+      
+      // Mensajes de error más específicos
+      if (error.code === 'permission-denied') {
+        throw new Error('Sin permisos para crear pagos');
+      } else if (error.code === 'unavailable') {
+        throw new Error('Servicio no disponible. Verifique su conexión');
+      } else if (error.message) {
+        throw error;
+      } else {
+        throw new Error('Error desconocido al crear pago');
+      }
     }
   },
 

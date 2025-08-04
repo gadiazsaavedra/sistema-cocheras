@@ -1,26 +1,25 @@
 {
   "short_name": "Cocheras",
   "name": "Sistema de Gestión de Cocheras",
+  "description": "Sistema integral para la gestión y control del pago mensual de clientes por el alquiler de cocheras",
   "icons": [
     {
-      "src": "favicon.ico",
-      "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/x-icon"
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' fill='%231976d2'/%3E%3Ctext x='96' y='120' font-size='80' text-anchor='middle' fill='white'%3E🏠%3C/text%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
     },
     {
-      "src": "logo192.png",
-      "type": "image/png",
-      "sizes": "192x192"
-    },
-    {
-      "src": "logo512.png",
-      "type": "image/png",
-      "sizes": "512x512"
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' fill='%231976d2'/%3E%3Ctext x='256' y='320' font-size='200' text-anchor='middle' fill='white'%3E🏠%3C/text%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
     }
   ],
   "start_url": ".",
   "display": "standalone",
   "theme_color": "#1976d2",
   "background_color": "#ffffff",
-  "orientation": "portrait"
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "categories": ["business", "productivity"],
+  "lang": "es-AR"
 }

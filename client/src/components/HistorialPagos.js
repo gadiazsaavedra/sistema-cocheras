@@ -33,7 +33,16 @@ const HistorialPagos = ({ open, onClose, cliente }) => {
   const cargarHistorial = async () => {
     setCargando(true);
     try {
-      const todosPagos = await pagosFirestore.obtener();
+      const response = await pagosFirestore.obtener({ limite: 100 });
+      const todosPagos = response.datos || response;
+      
+      // Asegurar que todosPagos es un array
+      if (!Array.isArray(todosPagos)) {
+        console.error('Los datos no son un array:', todosPagos);
+        setPagos([]);
+        return;
+      }
+      
       const pagosCliente = todosPagos
         .filter(pago => pago.clienteId === cliente.id)
         .sort((a, b) => new Date(b.fechaRegistro) - new Date(a.fechaRegistro));
@@ -41,6 +50,7 @@ const HistorialPagos = ({ open, onClose, cliente }) => {
       setPagos(pagosCliente);
     } catch (error) {
       console.error('Error cargando historial:', error);
+      setPagos([]);
     }
     setCargando(false);
   };

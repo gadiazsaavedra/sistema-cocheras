@@ -16,6 +16,7 @@ const fs = require('fs');
 //   setUser 
 // } = require('./error-monitoring');
 const { enviarNotificacionPagoPendiente, enviarResumenDiario } = require('./email-notifications');
+const { verificarAumentosTrimestrales } = require('./aumentos-trimestrales');
 
 // Inicializar Sentry
 // initSentryBackend();
@@ -253,6 +254,21 @@ app.post('/api/aumentos', authenticateToken, async (req, res) => {
   }
 });
 
+// Ruta para enviar notificación manual de aumentos trimestrales
+app.post('/api/admin/aumentos-trimestrales', authenticateToken, async (req, res) => {
+  try {
+    const adminEmails = ['gadiazsaavedra@gmail.com', 'c.andrea.lopez@hotmail.com'];
+    if (!adminEmails.includes(req.user.email)) {
+      return res.status(403).json({ error: 'Solo administradores pueden enviar notificaciones' });
+    }
+    
+    const result = await verificarAumentosTrimestrales();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/aumentos', authenticateToken, async (req, res) => {
   try {
     const snapshot = await db.collection('aumentos')
@@ -372,6 +388,22 @@ cron.schedule('0 9 * * *', async () => {
     }
   } catch (error) {
     console.error('Error en resumen diario:', error);
+  }
+});
+
+// Verificación de aumentos trimestrales - primer día de cada mes a las 8:00 AM
+cron.schedule('0 8 1 * *', async () => {
+  console.log('Ejecutando verificación de aumentos trimestrales...');
+  
+  try {
+    const result = await verificarAumentosTrimestrales();
+    if (result.success) {
+      console.log(`✅ Verificación de aumentos completada: ${result.clientesParaAumento} clientes requieren aumento`);
+    } else {
+      console.log(`⚠️ Error en verificación de aumentos: ${result.error}`);
+    }
+  } catch (error) {
+    console.error('Error en verificación de aumentos trimestrales:', error);
   }
 });
 

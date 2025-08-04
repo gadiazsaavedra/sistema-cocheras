@@ -54,7 +54,8 @@ const ReporteDisponibilidad = () => {
     
     setLoading(true);
     try {
-      const clientesData = await clientesFirestore.obtener();
+      const clientesResponse = await clientesFirestore.obtener();
+      const clientesData = clientesResponse.datos || clientesResponse || [];
       setClientes(clientesData);
       calcularEstadisticas(clientesData);
     } catch (error) {
@@ -100,7 +101,7 @@ const ReporteDisponibilidad = () => {
       'bajo_carpa': { diurna: 0, nocturna: 0, '24hs': 0 }
     };
 
-    clientesData.forEach(cliente => {
+    (clientesData || []).forEach(cliente => {
       if (cliente.estado === 'activo') {
         const techo = cliente.modalidadTecho?.replace(' ', '_') || 'bajo_techo';
         const tiempo = cliente.modalidadTiempo || 'diurna';
@@ -187,7 +188,7 @@ const ReporteDisponibilidad = () => {
                 <Grid item xs={6} md={3}>
                   <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'primary.light', borderRadius: 1 }}>
                     <Typography variant="h4" color="white">
-                      {clientes.filter(c => c.estado === 'activo').length}
+                      {(clientes || []).filter(c => c.estado === 'activo').length}
                     </Typography>
                     <Typography variant="body2" color="white">
                       Total Ocupadas
@@ -199,7 +200,7 @@ const ReporteDisponibilidad = () => {
                     <Typography variant="h4" color="white">
                       {Object.values(capacidadesActuales).reduce((total, techo) => 
                         total + Object.values(techo).reduce((sum, cap) => sum + cap, 0), 0) - 
-                       clientes.filter(c => c.estado === 'activo').length}
+                       (clientes || []).filter(c => c.estado === 'activo').length}
                     </Typography>
                     <Typography variant="body2" color="white">
                       Total Disponibles
@@ -220,7 +221,7 @@ const ReporteDisponibilidad = () => {
                 <Grid item xs={6} md={3}>
                   <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'warning.light', borderRadius: 1 }}>
                     <Typography variant="h4" color="white">
-                      {Math.round((clientes.filter(c => c.estado === 'activo').length / 
+                      {Math.round(((clientes || []).filter(c => c.estado === 'activo').length / 
                         Object.values(capacidadesActuales).reduce((total, techo) => 
                           total + Object.values(techo).reduce((sum, cap) => sum + cap, 0), 0)) * 100)}%
                     </Typography>

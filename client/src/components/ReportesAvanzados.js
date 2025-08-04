@@ -21,7 +21,7 @@ import {
   Chip
 } from '@mui/material';
 import { Print, FilterList } from '@mui/icons-material';
-import { pagosAPI, clientesAPI } from '../services/api';
+import { pagosFirestore, clientesFirestore } from '../services/firestore';
 import { calcularEstadoCliente, getEstadoTexto } from '../utils/morosidad';
 import moment from 'moment';
 
@@ -46,12 +46,12 @@ const ReportesAvanzados = () => {
     setCargando(true);
     try {
       const [clientesRes, pagosRes] = await Promise.all([
-        clientesAPI.obtener(),
-        pagosAPI.obtener()
+        clientesFirestore.obtener(),
+        pagosFirestore.obtener()
       ]);
 
-      const clientes = clientesRes.data;
-      const pagos = pagosRes.data;
+      const clientes = clientesRes.datos || clientesRes || [];
+      const pagos = pagosRes.datos || pagosRes || [];
 
       let datos = [];
 
@@ -84,13 +84,13 @@ const ReportesAvanzados = () => {
     return pagos
       .filter(pago => 
         pago.estado === 'confirmado' &&
-        moment(pago.fechaRegistro.toDate()).isSame(fechaSeleccionada, 'day')
+        moment(pago.fechaRegistro).isSame(fechaSeleccionada, 'day')
       )
       .map(pago => ({
         cliente: pago.clienteNombre || 'Cliente',
         monto: pago.monto,
         empleado: pago.empleadoNombre || 'Empleado',
-        hora: moment(pago.fechaRegistro.toDate()).format('HH:mm'),
+        hora: moment(pago.fechaRegistro).format('HH:mm'),
         tipo: pago.tipoPago
       }));
   };
@@ -113,7 +113,7 @@ const ReportesAvanzados = () => {
       empleado: empleados.find(e => e.email === empleadoEmail)?.nombre || 'Empleado',
       totalClientes: clientesEmpleado.length,
       cobrosHoy: pagosEmpleado.filter(p => 
-        moment(p.fechaRegistro.toDate()).isSame(moment(), 'day')
+        moment(p.fechaRegistro).isSame(moment(), 'day')
       ).length,
       montoTotal: pagosEmpleado
         .filter(p => p.estado === 'confirmado')
@@ -136,12 +136,12 @@ const ReportesAvanzados = () => {
       const estadoInfo = calcularEstadoCliente(cliente, pagos);
       const pagoReciente = pagos
         .filter(p => p.clienteId === cliente.id && p.estado === 'confirmado')
-        .sort((a, b) => moment(b.fechaRegistro.toDate()) - moment(a.fechaRegistro.toDate()))[0];
+        .sort((a, b) => moment(b.fechaRegistro) - moment(a.fechaRegistro))[0];
 
       return {
         ...cliente,
         estadoInfo,
-        ultimoPago: pagoReciente ? moment(pagoReciente.fechaRegistro.toDate()).format('DD/MM/YYYY') : 'Nunca'
+        ultimoPago: pagoReciente ? moment(pagoReciente.fechaRegistro).format('DD/MM/YYYY') : 'Nunca'
       };
     }).filter(cliente => {
       if (filtros.estado === 'morosos') return ['vencido', 'moroso'].includes(cliente.estadoInfo.estado);
