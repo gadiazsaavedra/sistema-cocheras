@@ -6,7 +6,7 @@ const moment = require('moment');
 const cron = require('node-cron');
 const path = require('path');
 const fs = require('fs');
-const backupRouter = require('./backup-api');
+// const backupRouter = require('./backup-api');
 const { 
   initSentryBackend, 
   sentryRequestHandler, 
@@ -51,7 +51,7 @@ app.use(express.static('client/build'));
 app.use('/uploads', express.static('uploads')); // Servir fotos locales
 
 // Rutas de backup
-app.use('/api/backup', backupRouter);
+// app.use('/api/backup', backupRouter);
 
 // Middleware de autenticación con Sentry
 const authenticateToken = async (req, res, next) => {
