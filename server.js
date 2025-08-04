@@ -6,6 +6,19 @@ const moment = require('moment');
 const cron = require('node-cron');
 const path = require('path');
 const fs = require('fs');
+const backupRouter = require('./backup-api');
+const { 
+  initSentryBackend, 
+  sentryRequestHandler, 
+  sentryErrorHandler, 
+  captureError, 
+  captureMessage,
+  setUser 
+} = require('./error-monitoring');
+const { enviarNotificacionPagoPendiente, enviarResumenDiario } = require('./email-notifications');
+
+// Inicializar Sentry
+initSentryBackend();
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -24,6 +37,9 @@ if (!fs.existsSync('./uploads')) {
   fs.mkdirSync('./uploads');
 }
 
+// Sentry request handler (debe ir antes de otras rutas)
+app.use(sentryRequestHandler());
+
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
     ? ['https://spiffy-flan-5a5eba.netlify.app', 'https://sistema-cocheras-backend.onrender.com']
@@ -34,7 +50,10 @@ app.use(express.json());
 app.use(express.static('client/build'));
 app.use('/uploads', express.static('uploads')); // Servir fotos locales
 
-// Middleware de autenticación
+// Rutas de backup
+app.use('/api/backup', backupRouter);
+
+// Middleware de autenticación con Sentry
 const authenticateToken = async (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Token requerido' });
@@ -42,8 +61,13 @@ const authenticateToken = async (req, res, next) => {
   try {
     const decodedToken = await admin.auth().verifyIdToken(token);
     req.user = decodedToken;
+    
+    // Configurar usuario en Sentry
+    setUser(decodedToken);
+    
     next();
   } catch (error) {
+    captureError(error, { context: 'authentication', token: token?.substring(0, 10) + '...' });
     res.status(403).json({ error: 'Token inválido' });
   }
 };
@@ -84,6 +108,7 @@ app.get('/api/clientes', authenticateToken, async (req, res) => {
     const clientes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     res.json(clientes);
   } catch (error) {
+    captureError(error, { endpoint: '/api/clientes', method: 'GET', user: req.user?.email });
     res.status(500).json({ error: error.message });
   }
 });
@@ -148,29 +173,40 @@ app.get('/api/pagos', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/pagos', authenticateToken, upload.single('comprobante'), async (req, res) => {
+app.post('/api/pagos', authenticateToken, async (req, res) => {
   try {
-    const { clienteId, monto, tipoPago, ubicacion } = req.body;
-    
-    let comprobanteUrl = null;
-    if (req.file) {
-      comprobanteUrl = `/uploads/${req.file.filename}`; // Ruta local
-    }
+    console.log('📥 Recibiendo pago:', req.body);
     
     const pagoData = {
-      clienteId,
-      monto: parseFloat(monto),
-      tipoPago,
-      ubicacion: JSON.parse(ubicacion),
-      comprobanteUrl,
+      ...req.body,
+      monto: parseFloat(req.body.monto),
       empleadoId: req.user.uid,
       fechaRegistro: admin.firestore.FieldValue.serverTimestamp(),
       estado: 'pendiente'
     };
     
+    console.log('💾 Guardando pago en Firestore...');
     const docRef = await db.collection('pagos').add(pagoData);
+    console.log('✅ Pago guardado con ID:', docRef.id);
+    
+    // Enviar notificación por email a administradores
+    console.log('📧 Enviando notificación por email...');
+    const emailResult = await enviarNotificacionPagoPendiente({
+      ...pagoData,
+      id: docRef.id,
+      clienteNombre: req.body.clienteNombre || 'Cliente sin nombre',
+      empleadoNombre: req.body.empleadoNombre || 'Empleado'
+    });
+    
+    if (emailResult.success) {
+      console.log('✅ Notificación email enviada para pago:', docRef.id);
+    } else {
+      console.log('⚠️ Error enviando email:', emailResult.error);
+    }
+    
     res.json({ id: docRef.id, ...pagoData });
   } catch (error) {
+    console.error('❌ Error en /api/pagos:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -313,29 +349,45 @@ app.get('/api/reportes/clientes', authenticateToken, async (req, res) => {
 });
 
 // SISTEMA DE NOTIFICACIONES (Cron Jobs)
+// Resumen diario de pagos pendientes a las 9:00 AM
 cron.schedule('0 9 * * *', async () => {
-  console.log('Ejecutando notificaciones diarias...');
+  console.log('Ejecutando resumen diario de pagos pendientes...');
+  
+  try {
+    const result = await enviarResumenDiario();
+    if (result.success) {
+      console.log(`✅ Resumen diario enviado: ${result.count || 0} pagos pendientes`);
+    } else {
+      console.log(`⚠️ Error en resumen diario: ${result.error}`);
+    }
+  } catch (error) {
+    console.error('Error en resumen diario:', error);
+  }
+});
+
+// Notificaciones de morosidad (mantener sistema existente)
+cron.schedule('0 10 * * *', async () => {
+  console.log('Ejecutando notificaciones de morosidad...');
   
   try {
     const clientesSnapshot = await db.collection('clientes').where('estado', '==', 'activo').get();
     const clientes = clientesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     
     for (const cliente of clientes) {
-      const diasVencimiento = moment().diff(moment(cliente.fechaVencimiento.toDate()), 'days');
-      
-      if (diasVencimiento === 25) {
-        // Recordatorio
-        await enviarNotificacion(cliente, 'recordatorio');
-      } else if (diasVencimiento === 30) {
-        // Vencimiento
-        await enviarNotificacion(cliente, 'vencimiento');
-      } else if (diasVencimiento === 35) {
-        // Morosidad
-        await enviarNotificacion(cliente, 'morosidad');
+      if (cliente.fechaVencimiento) {
+        const diasVencimiento = moment().diff(moment(cliente.fechaVencimiento.toDate()), 'days');
+        
+        if (diasVencimiento === 25) {
+          await enviarNotificacion(cliente, 'recordatorio');
+        } else if (diasVencimiento === 30) {
+          await enviarNotificacion(cliente, 'vencimiento');
+        } else if (diasVencimiento === 35) {
+          await enviarNotificacion(cliente, 'morosidad');
+        }
       }
     }
   } catch (error) {
-    console.error('Error en notificaciones:', error);
+    console.error('Error en notificaciones de morosidad:', error);
   }
 });
 
@@ -372,10 +424,14 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
 });
 
+// Sentry error handler (debe ir al final, antes de listen)
+app.use(sentryErrorHandler());
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Servidor ejecutándose en puerto ${PORT}`);
   if (process.env.NODE_ENV === 'production') {
     console.log(`Servidor en producción: https://sistema-cocheras-backend.onrender.com`);
+    captureMessage('Servidor iniciado en producción', 'info', { port: PORT });
   } else {
     console.log(`Acceso local: http://localhost:${PORT}`);
     console.log(`Acceso red: http://[TU_IP]:${PORT}`);
