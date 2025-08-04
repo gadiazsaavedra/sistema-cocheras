@@ -2,7 +2,7 @@ const admin = require('firebase-admin');
 const nodemailer = require('nodemailer');
 
 // Configurar transporter de email
-const transporter = nodemailer.createTransporter({
+const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
     user: process.env.EMAIL_USER || 'gadiazsaavedra@gmail.com',
