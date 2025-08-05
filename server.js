@@ -41,16 +41,46 @@ if (!fs.existsSync('./uploads')) {
 // Sentry request handler (debe ir antes de otras rutas)
 // app.use(sentryRequestHandler());
 
+// CORS más permisivo para debugging
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://sistema-cocheras.netlify.app', 'https://sistema-cocheras-backend.onrender.com']
-    : true,
-  credentials: true
+  origin: function (origin, callback) {
+    console.log('🌐 CORS Origin:', origin);
+    // Permitir requests sin origin (Postman, apps móviles)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      'https://sistema-cocheras.netlify.app',
+      'https://sistema-cocheras-backend.onrender.com',
+      'http://localhost:3000',
+      'http://localhost:3001'
+    ];
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log('❌ CORS blocked origin:', origin);
+      callback(null, true); // Temporalmente permitir todos los orígenes para debugging
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// Manejar preflight requests
+app.options('*', (req, res) => {
+  console.log('📶 Preflight request:', req.method, req.path);
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.sendStatus(200);
+});
 
 // Log todas las peticiones
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  console.log('📱 Headers:', req.headers.origin, req.headers.authorization ? 'Auth: YES' : 'Auth: NO');
   next();
 });
 app.use(express.json());

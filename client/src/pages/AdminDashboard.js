@@ -487,7 +487,13 @@ const AdminDashboard = () => {
       )}
 
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Tabs value={tabValue} onChange={(e, newValue) => setTabValue(newValue)}>
+        <Tabs 
+          value={tabValue} 
+          onChange={(e, newValue) => setTabValue(newValue)}
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
+        >
           <Tab label="Pagos Pendientes" />
           <Tab label="Gestión de Clientes" />
           <Tab label="Pagos Sin Identificar" />
