@@ -223,6 +223,7 @@ const HistorialPagos = ({ open, onClose, cliente, AlertaAdelanto }) => {
                   <TableCell>Tipo</TableCell>
                   <TableCell>Estado</TableCell>
                   <TableCell>Empleado</TableCell>
+                  <TableCell>Observaciones</TableCell>
                   <TableCell>Confirmado Por</TableCell>
                 </TableRow>
               </TableHead>
@@ -252,6 +253,21 @@ const HistorialPagos = ({ open, onClose, cliente, AlertaAdelanto }) => {
                       />
                     </TableCell>
                     <TableCell>{pago.empleadoNombre || 'N/A'}</TableCell>
+                    <TableCell>
+                      {pago.observaciones ? (
+                        <Typography variant="caption" sx={{ 
+                          fontStyle: 'italic',
+                          color: 'text.secondary',
+                          maxWidth: 150,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          display: 'block'
+                        }}>
+                          📝 {pago.observaciones}
+                        </Typography>
+                      ) : '-'}
+                    </TableCell>
                     <TableCell>
                       {pago.fechaConfirmacion ? 
                         `${moment(pago.fechaConfirmacion).format('DD/MM HH:mm')}` : 
