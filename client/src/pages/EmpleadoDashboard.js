@@ -155,26 +155,23 @@ const EmpleadoDashboard = () => {
         },
         (error) => {
           console.error('Error obteniendo ubicación:', error);
-          // Usar ubicación simulada solo en desarrollo
-          if (window.location.hostname === 'localhost') {
-            setUbicacion({
-              lat: -34.6037,
-              lng: -58.3816,
-              timestamp: Date.now(),
-              simulada: true
-            });
-            setMensaje('📍 Usando ubicación simulada (desarrollo)');
-            setSnackbarOpen(true);
-          } else {
-            setMensaje('❌ No se pudo obtener la ubicación GPS. Verifique los permisos del navegador.');
-            setSnackbarOpen(true);
-          }
+          // Establecer ubicación por defecto para no bloquear
+          setUbicacion({
+            lat: 0,
+            lng: 0,
+            timestamp: Date.now(),
+            error: 'GPS no disponible'
+          });
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 600000 }
       );
     } else {
-      setMensaje('Geolocalización no disponible en este dispositivo');
-      setSnackbarOpen(true);
+      setUbicacion({
+        lat: 0,
+        lng: 0,
+        timestamp: Date.now(),
+        error: 'Geolocalización no soportada'
+      });
     }
   };
 
@@ -255,11 +252,11 @@ const EmpleadoDashboard = () => {
       return;
     }
 
+    // Si no hay ubicación, intentar obtenerla pero no bloquear el registro
     if (!ubicacion) {
-      setMensaje('Obteniendo ubicación...');
+      setMensaje('⚡ Registrando pago sin GPS...');
       setSnackbarOpen(true);
-      obtenerUbicacion();
-      return;
+      obtenerUbicacion(); // Intentar en background
     }
     
     // Validar monto mínimo para clientes morosos
@@ -299,7 +296,7 @@ const EmpleadoDashboard = () => {
         empleadoNombre: user.email,
         fechaRegistro: new Date().toISOString(),
         estado: 'pendiente',
-        ubicacion: ubicacion || { lat: 0, lng: 0, error: 'Sin GPS' },
+        ubicacion: ubicacion || { lat: 0, lng: 0, error: 'Sin GPS', timestamp: Date.now() },
         fotoBase64: fotoBase64
       };
 
@@ -753,11 +750,12 @@ const EmpleadoDashboard = () => {
               </Suspense>
             </Box>
 
-            {ubicacion && (
-              <Alert severity="success" sx={{ mt: 2 }}>
-                📍 Ubicación {ubicacion.simulada ? 'simulada' : 'GPS'} capturada
-              </Alert>
-            )}
+            <Alert severity={ubicacion?.error ? 'warning' : 'success'} sx={{ mt: 2 }}>
+              {ubicacion?.error ? 
+                '⚠️ Registrando sin GPS - Ubicación no disponible' : 
+                '📍 Ubicación GPS capturada'
+              }
+            </Alert>
 
             <Box sx={{ 
               mt: 3, 
