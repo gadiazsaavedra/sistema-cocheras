@@ -522,6 +522,25 @@ function generarMensaje(tipo, cliente) {
   return mensajes[tipo];
 }
 
+// Ruta para corregir monto específico (temporal)
+app.put('/api/admin/corregir-monto/:pagoId', authenticateToken, async (req, res) => {
+  try {
+    const { pagoId } = req.params;
+    const { montoNuevo } = req.body;
+    
+    console.log(`Corrigiendo monto del pago ${pagoId} a ${montoNuevo}`);
+    
+    await db.collection('pagos').doc(pagoId).update({
+      monto: parseFloat(montoNuevo)
+    });
+    
+    res.json({ message: `Monto corregido a ${montoNuevo}` });
+  } catch (error) {
+    console.error('Error corrigiendo monto:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Health check para Render
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
