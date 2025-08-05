@@ -36,6 +36,7 @@ import HistorialPagos from '../components/HistorialPagos';
 import AlertaDuplicados from '../components/AlertaDuplicados';
 import PagoAdelantado from '../components/PagoAdelantado';
 import AlertaAdelanto from '../components/AlertaAdelanto';
+import DetalleMorosidad from '../components/DetalleMorosidad';
 
 // Lazy loading de componentes pesados
 const TablaPreciosConfig = lazy(() => import('../components/TablaPreciosConfig'));
@@ -98,6 +99,8 @@ const AdminDashboard = () => {
   const [openExportarClientes, setOpenExportarClientes] = useState(false);
   const [clientePagoAdelantado, setClientePagoAdelantado] = useState(null);
   const [openPagoAdelantado, setOpenPagoAdelantado] = useState(false);
+  const [clienteDetalleMorosidad, setClienteDetalleMorosidad] = useState(null);
+  const [openDetalleMorosidad, setOpenDetalleMorosidad] = useState(false);
 
   useEffect(() => {
     cargarDatos();
@@ -869,6 +872,21 @@ const AdminDashboard = () => {
                         >
                           Historial
                         </Button>
+                        {cliente.fechaIngreso && (
+                          <Button 
+                            size="small" 
+                            startIcon={<Warning />}
+                            onClick={() => {
+                              setClienteDetalleMorosidad(cliente);
+                              setOpenDetalleMorosidad(true);
+                            }}
+                            variant="outlined"
+                            color="info"
+                            sx={{ mr: 1 }}
+                          >
+                            Ver Períodos
+                          </Button>
+                        )}
                         <Button 
                           size="small" 
                           startIcon={<Delete />}
@@ -1557,6 +1575,17 @@ const AdminDashboard = () => {
           setMensaje('✅ Pago adelantado registrado exitosamente');
           cargarDatos();
         }}
+      />
+      
+      {/* Dialog para Detalle de Morosidad */}
+      <DetalleMorosidad
+        open={openDetalleMorosidad}
+        onClose={() => {
+          setOpenDetalleMorosidad(false);
+          setClienteDetalleMorosidad(null);
+        }}
+        cliente={clienteDetalleMorosidad}
+        pagos={todosLosPagos}
       />
     </Container>
   );

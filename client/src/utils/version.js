@@ -1,5 +1,5 @@
 // Sistema de versionado
-export const VERSION = "1.0.19";
+export const VERSION = "1.0.20";
 export const BUILD_DATE = process.env.REACT_APP_BUILD_DATE || new Date().toISOString().split('T')[0];
 export const VERSION_INFO = {
   version: VERSION,
