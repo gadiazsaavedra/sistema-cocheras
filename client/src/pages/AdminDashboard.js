@@ -1133,6 +1133,20 @@ const AdminDashboard = () => {
                       }
                     </Typography>
                   </Grid>
+                  {pagoDetalle.observaciones && (
+                    <Grid item xs={12}>
+                      <Typography variant="body2" color="text.secondary">Observaciones:</Typography>
+                      <Typography variant="body1" sx={{ 
+                        fontStyle: 'italic',
+                        bgcolor: 'info.light',
+                        p: 1,
+                        borderRadius: 1,
+                        color: 'info.contrastText'
+                      }}>
+                        📝 {pagoDetalle.observaciones}
+                      </Typography>
+                    </Grid>
+                  )}
                 </Grid>
               </Box>
               
