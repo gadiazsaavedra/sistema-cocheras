@@ -548,7 +548,12 @@ app.get('/api/health', (req, res) => {
 
 // Servir la aplicación React
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
+  // En producción, no servir archivos estáticos desde el backend
+  if (process.env.NODE_ENV === 'production') {
+    res.json({ message: 'API Backend - Frontend servido desde Netlify' });
+  } else {
+    res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
+  }
 });
 
 // Sentry error handler (debe ir al final, antes de listen)
