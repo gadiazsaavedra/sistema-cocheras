@@ -108,6 +108,7 @@ const ReportesAvanzados = () => {
   const generarReportePorEmpleado = (clientes, pagos, empleadoEmail) => {
     const clientesEmpleado = clientes.filter(c => c.empleadoAsignado === empleadoEmail);
     const pagosEmpleado = pagos.filter(p => p.empleadoId === empleadoEmail);
+    const pagosRechazados = pagosEmpleado.filter(p => p.estado === 'rechazado');
     
     return {
       empleado: empleados.find(e => e.email === empleadoEmail)?.nombre || 'Empleado',
@@ -118,10 +119,17 @@ const ReportesAvanzados = () => {
       montoTotal: pagosEmpleado
         .filter(p => p.estado === 'confirmado')
         .reduce((sum, p) => sum + p.monto, 0),
+      pagosRechazados: pagosRechazados.length,
       clientes: clientesEmpleado.map(cliente => {
         const estadoInfo = calcularEstadoCliente(cliente, pagos);
         return { ...cliente, estadoInfo };
-      })
+      }),
+      rechazados: pagosRechazados.map(pago => ({
+        cliente: pago.clienteNombre,
+        monto: pago.monto,
+        fecha: moment(pago.fechaRegistro).format('DD/MM/YYYY'),
+        motivo: pago.observaciones || 'Sin motivo especificado'
+      }))
     };
   };
 
@@ -425,13 +433,49 @@ const ReportesAvanzados = () => {
                   <Typography variant="body2">Cobros Hoy</Typography>
                 </Paper>
               </Grid>
-              <Grid item xs={6}>
+              <Grid item xs={3}>
                 <Paper sx={{ p: 2, textAlign: 'center' }}>
                   <Typography variant="h4" color="info.main">${datosReporte.montoTotal?.toLocaleString()}</Typography>
                   <Typography variant="body2">Monto Total Cobrado</Typography>
                 </Paper>
               </Grid>
+              <Grid item xs={3}>
+                <Paper sx={{ p: 2, textAlign: 'center' }}>
+                  <Typography variant="h4" color="error.main">{datosReporte.pagosRechazados}</Typography>
+                  <Typography variant="body2">Pagos Rechazados</Typography>
+                </Paper>
+              </Grid>
             </Grid>
+            
+            {datosReporte.rechazados && datosReporte.rechazados.length > 0 && (
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="h6" color="error.main" gutterBottom>
+                  ❌ Pagos Rechazados ({datosReporte.rechazados.length})
+                </Typography>
+                <TableContainer component={Paper}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Cliente</TableCell>
+                        <TableCell>Monto</TableCell>
+                        <TableCell>Fecha</TableCell>
+                        <TableCell>Motivo</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {datosReporte.rechazados.map((rechazo, index) => (
+                        <TableRow key={index}>
+                          <TableCell>{rechazo.cliente}</TableCell>
+                          <TableCell>${rechazo.monto.toLocaleString()}</TableCell>
+                          <TableCell>{rechazo.fecha}</TableCell>
+                          <TableCell>{rechazo.motivo}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+            )}
           </Box>
         )}
       </CardContent>
