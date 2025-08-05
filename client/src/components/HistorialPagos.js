@@ -109,7 +109,7 @@ const HistorialPagos = ({ open, onClose, cliente, AlertaAdelanto }) => {
               <p>Pagos Confirmados</p>
             </div>
             <div class="stat-box">
-              <h4>$${stats.totalMonto.toLocaleString()}</h4>
+              <h4>$${Math.round(stats.totalMonto).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</h4>
               <p>Total Pagado</p>
             </div>
             <div class="stat-box">
@@ -136,7 +136,7 @@ const HistorialPagos = ({ open, onClose, cliente, AlertaAdelanto }) => {
               ${pagos.map(pago => `
                 <tr class="${pago.estado}">
                   <td>${moment(pago.fechaRegistro).format('DD/MM/YYYY HH:mm')}</td>
-                  <td>$${pago.monto.toLocaleString()}</td>
+                  <td>$${Math.round(pago.monto).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
                   <td>${pago.tipoPago}</td>
                   <td>${pago.estado.toUpperCase()}</td>
                   <td>${pago.empleadoNombre || 'N/A'}</td>
@@ -195,7 +195,7 @@ const HistorialPagos = ({ open, onClose, cliente, AlertaAdelanto }) => {
             <Typography variant="body2">Pagos Confirmados</Typography>
           </Paper>
           <Paper sx={{ p: 2, flex: 1, textAlign: 'center' }}>
-            <Typography variant="h4" color="success.main">${stats.totalMonto.toLocaleString()}</Typography>
+            <Typography variant="h4" color="success.main">${Math.round(stats.totalMonto).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</Typography>
             <Typography variant="body2">Total Pagado</Typography>
           </Paper>
           <Paper sx={{ p: 2, flex: 1, textAlign: 'center' }}>
@@ -234,7 +234,7 @@ const HistorialPagos = ({ open, onClose, cliente, AlertaAdelanto }) => {
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2" fontWeight="bold">
-                        ${pago.monto.toLocaleString()}
+                        ${Math.round(pago.monto).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                       </Typography>
                     </TableCell>
                     <TableCell>

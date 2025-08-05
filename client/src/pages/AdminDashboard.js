@@ -529,7 +529,7 @@ const AdminDashboard = () => {
                   {pagosPendientes.map((pago) => (
                     <TableRow key={pago.id}>
                       <TableCell>{pago.clienteNombre}</TableCell>
-                      <TableCell>${pago.monto}</TableCell>
+                      <TableCell>${Math.round(pago.monto).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</TableCell>
                       <TableCell>
                         <Chip 
                           label={pago.tipoPago} 
@@ -786,7 +786,7 @@ const AdminDashboard = () => {
                           'Sin asignar'
                         }
                       </TableCell>
-                      <TableCell>${cliente.precio?.toLocaleString()} / {cliente.diasVencimiento || 30}d</TableCell>
+                      <TableCell>${Math.round(cliente.precio || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} / {cliente.diasVencimiento || 30}d</TableCell>
                       <TableCell>
                         {cliente.fechaProximoVencimiento ? 
                           moment(cliente.fechaProximoVencimiento).format('DD/MM/YYYY') : 
@@ -1106,7 +1106,7 @@ const AdminDashboard = () => {
                   <Grid item xs={6}>
                     <Typography variant="body2" color="text.secondary">Monto:</Typography>
                     <Typography variant="h6" color="success.main">
-                      ${pagoDetalle.monto?.toLocaleString()}
+                      ${Math.round(pagoDetalle.monto || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                     </Typography>
                   </Grid>
                   <Grid item xs={6}>
@@ -1305,7 +1305,7 @@ const AdminDashboard = () => {
                 <Typography variant="body2" color="text.secondary">
                   Teléfono: {clientePagoDirecto.telefono}<br/>
                   Vehículo: {clientePagoDirecto.tipoVehiculo}<br/>
-                  Precio mensual: ${clientePagoDirecto.precio?.toLocaleString()}
+                  Precio mensual: ${Math.round(clientePagoDirecto.precio || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                 </Typography>
               </Box>
               
@@ -1318,7 +1318,7 @@ const AdminDashboard = () => {
                   setPagoDirectoData({...pagoDirectoData, monto: e.target.value});
                 }}
                 placeholder={clientePagoDirecto.precio?.toString()}
-                helperText={`Precio sugerido: $${clientePagoDirecto.precio?.toLocaleString()}`}
+                helperText={`Precio sugerido: $${Math.round(clientePagoDirecto.precio || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
                 sx={{ mb: 2 }}
                 inputProps={{ min: 0, step: 1 }}
               />
