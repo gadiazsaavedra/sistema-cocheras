@@ -20,7 +20,7 @@ import { Close, Print } from '@mui/icons-material';
 import { pagosFirestore } from '../services/firestore';
 import moment from 'moment';
 
-const HistorialPagos = ({ open, onClose, cliente }) => {
+const HistorialPagos = ({ open, onClose, cliente, AlertaAdelanto }) => {
   const [pagos, setPagos] = useState([]);
   const [cargando, setCargando] = useState(false);
 
@@ -186,6 +186,8 @@ const HistorialPagos = ({ open, onClose, cliente }) => {
       </DialogTitle>
       
       <DialogContent>
+        {/* Alerta de Adelanto */}
+        {AlertaAdelanto && <AlertaAdelanto cliente={cliente} />}
         {/* Estadísticas */}
         <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
           <Paper sx={{ p: 2, flex: 1, textAlign: 'center' }}>

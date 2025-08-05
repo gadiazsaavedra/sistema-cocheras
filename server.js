@@ -176,6 +176,42 @@ app.get('/api/pagos', authenticateToken, async (req, res) => {
   }
 });
 
+// Ruta para pagos adelantados
+app.post('/api/pagos/adelantado', authenticateToken, async (req, res) => {
+  try {
+    console.log('📥 Recibiendo pago adelantado:', req.body);
+    
+    const pagoData = {
+      ...req.body,
+      monto: parseFloat(req.body.monto),
+      empleadoId: req.user.uid,
+      fechaRegistro: admin.firestore.FieldValue.serverTimestamp(),
+      estado: 'confirmado', // Los pagos adelantados se confirman automáticamente
+      fechaConfirmacion: admin.firestore.FieldValue.serverTimestamp(),
+      confirmadoPor: req.user.uid
+    };
+    
+    console.log('💾 Guardando pago adelantado en Firestore...');
+    const docRef = await db.collection('pagos').add(pagoData);
+    
+    // Actualizar cliente con información del adelanto
+    const fechaVencimiento = new Date();
+    fechaVencimiento.setMonth(fechaVencimiento.getMonth() + req.body.mesesAdelantados);
+    
+    await db.collection('clientes').doc(req.body.clienteId).update({
+      mesesAdelantados: req.body.mesesAdelantados,
+      fechaVencimientoAdelanto: admin.firestore.Timestamp.fromDate(fechaVencimiento),
+      ultimoPagoAdelantado: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    console.log('✅ Pago adelantado guardado con ID:', docRef.id);
+    res.json({ id: docRef.id, ...pagoData });
+  } catch (error) {
+    console.error('❌ Error en pago adelantado:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/pagos', authenticateToken, async (req, res) => {
   try {
     console.log('📥 Recibiendo pago:', req.body);

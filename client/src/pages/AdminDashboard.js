@@ -29,11 +29,13 @@ import {
   MenuItem,
   CircularProgress
 } from '@mui/material';
-import { CheckCircle, Cancel, Print, Add, Edit, History, Delete, Warning, Visibility, PhotoCamera, Payment, Upload } from '@mui/icons-material';
+import { CheckCircle, Cancel, Print, Add, Edit, History, Delete, Warning, Visibility, PhotoCamera, Payment, Upload, Schedule } from '@mui/icons-material';
 import { pagosFirestore, clientesFirestore, reportesFirestore } from '../services/firestore';
 import ClienteForm from '../components/ClienteForm';
 import HistorialPagos from '../components/HistorialPagos';
 import AlertaDuplicados from '../components/AlertaDuplicados';
+import PagoAdelantado from '../components/PagoAdelantado';
+import AlertaAdelanto from '../components/AlertaAdelanto';
 
 // Lazy loading de componentes pesados
 const TablaPreciosConfig = lazy(() => import('../components/TablaPreciosConfig'));
@@ -91,6 +93,8 @@ const AdminDashboard = () => {
   }, []);
   const [loadingHistorial, setLoadingHistorial] = useState(false);
   const [openExportarClientes, setOpenExportarClientes] = useState(false);
+  const [clientePagoAdelantado, setClientePagoAdelantado] = useState(null);
+  const [openPagoAdelantado, setOpenPagoAdelantado] = useState(false);
 
   useEffect(() => {
     cargarDatos();
@@ -784,22 +788,32 @@ const AdminDashboard = () => {
                         }
                       </TableCell>
                       <TableCell>
-                        <Chip 
-                          label={getEstadoTexto(cliente.estadoMorosidad)}
-                          color={cliente.estadoMorosidad.color}
-                          size="small"
-                          sx={{
-                            fontWeight: 'bold',
-                            ...(cliente.estadoMorosidad.estado === 'moroso' && {
-                              animation: 'pulse 2s infinite',
-                              '@keyframes pulse': {
-                                '0%': { opacity: 1 },
-                                '50%': { opacity: 0.7 },
-                                '100%': { opacity: 1 }
-                              }
-                            })
-                          }}
-                        />
+                        <Box>
+                          <Chip 
+                            label={getEstadoTexto(cliente.estadoMorosidad)}
+                            color={cliente.estadoMorosidad.color}
+                            size="small"
+                            sx={{
+                              fontWeight: 'bold',
+                              ...(cliente.estadoMorosidad.estado === 'moroso' && {
+                                animation: 'pulse 2s infinite',
+                                '@keyframes pulse': {
+                                  '0%': { opacity: 1 },
+                                  '50%': { opacity: 0.7 },
+                                  '100%': { opacity: 1 }
+                                }
+                              })
+                            }}
+                          />
+                          {cliente.mesesAdelantados && (
+                            <Chip 
+                              label={`📅 ${cliente.mesesAdelantados}m adelantado`}
+                              color="info"
+                              size="small"
+                              sx={{ ml: 0.5, mt: 0.5 }}
+                            />
+                          )}
+                        </Box>
                       </TableCell>
                       <TableCell>
                         <Button 
@@ -823,6 +837,19 @@ const AdminDashboard = () => {
                           sx={{ mr: 1 }}
                         >
                           Pago Directo
+                        </Button>
+                        <Button 
+                          size="small" 
+                          startIcon={<Schedule />}
+                          onClick={() => {
+                            setClientePagoAdelantado(cliente);
+                            setOpenPagoAdelantado(true);
+                          }}
+                          color="info"
+                          variant="outlined"
+                          sx={{ mr: 1 }}
+                        >
+                          Pago Adelantado
                         </Button>
                         <Button 
                           size="small" 
@@ -957,6 +984,7 @@ const AdminDashboard = () => {
           setClienteHistorial(null);
         }}
         cliente={clienteHistorial}
+        AlertaAdelanto={AlertaAdelanto}
       />
       
       {/* Dialog de confirmación de eliminación */}
@@ -1382,6 +1410,20 @@ const AdminDashboard = () => {
           vencimiento: 'Próximo Vencimiento',
           morosidad: 'Días de Morosidad (Mayor a Menor)'
         }[filtroOrden] || 'Nombre'}
+      />
+      
+      {/* Dialog para Pago Adelantado */}
+      <PagoAdelantado
+        open={openPagoAdelantado}
+        onClose={() => {
+          setOpenPagoAdelantado(false);
+          setClientePagoAdelantado(null);
+        }}
+        cliente={clientePagoAdelantado}
+        onSuccess={() => {
+          setMensaje('✅ Pago adelantado registrado exitosamente');
+          cargarDatos();
+        }}
       />
     </Container>
   );
