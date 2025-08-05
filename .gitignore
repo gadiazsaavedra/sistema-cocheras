@@ -48,5 +48,8 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+verificar-observaciones.js
+corregir-monto.js
+
 # Local Netlify folder
 .netlify

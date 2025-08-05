@@ -541,6 +541,31 @@ app.put('/api/admin/corregir-monto/:pagoId', authenticateToken, async (req, res)
   }
 });
 
+// Ruta para editar monto de pago
+app.put('/api/pagos/:id/editar-monto', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nuevoMonto, motivoEdicion, montoOriginal } = req.body;
+    
+    console.log(`Editando monto del pago ${id}: ${montoOriginal} → ${nuevoMonto}`);
+    
+    // Crear observación de la edición
+    const observacionEdicion = `Monto corregido: $${montoOriginal} → $${nuevoMonto}. Motivo: ${motivoEdicion}`;
+    
+    await db.collection('pagos').doc(id).update({
+      monto: parseFloat(nuevoMonto),
+      observaciones: observacionEdicion,
+      editadoPor: req.user.uid,
+      fechaEdicion: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    res.json({ message: 'Monto actualizado exitosamente' });
+  } catch (error) {
+    console.error('Error editando monto:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Health check para Render
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });

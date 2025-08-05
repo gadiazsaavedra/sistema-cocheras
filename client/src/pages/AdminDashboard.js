@@ -29,7 +29,7 @@ import {
   MenuItem,
   CircularProgress
 } from '@mui/material';
-import { CheckCircle, Cancel, Print, Add, Edit, History, Delete, Warning, Visibility, PhotoCamera, Payment, Upload, Schedule } from '@mui/icons-material';
+import { CheckCircle, Cancel, Print, Add, Edit, History, Delete, Warning, Visibility, PhotoCamera, Payment, Upload, Schedule, EditNote } from '@mui/icons-material';
 import { pagosFirestore, clientesFirestore, reportesFirestore } from '../services/firestore';
 import ClienteForm from '../components/ClienteForm';
 import HistorialPagos from '../components/HistorialPagos';
@@ -68,6 +68,9 @@ const AdminDashboard = () => {
   const [openEliminarDialog, setOpenEliminarDialog] = useState(false);
   const [pagoDetalle, setPagoDetalle] = useState(null);
   const [openPagoDetalle, setOpenPagoDetalle] = useState(false);
+  const [editandoMonto, setEditandoMonto] = useState(false);
+  const [nuevoMonto, setNuevoMonto] = useState('');
+  const [motivoEdicion, setMotivoEdicion] = useState('');
   const [clientePagoDirecto, setClientePagoDirecto] = useState(null);
   const [openPagoDirecto, setOpenPagoDirecto] = useState(false);
   const [openImportarClientes, setOpenImportarClientes] = useState(false);
@@ -1145,6 +1148,116 @@ const AdminDashboard = () => {
                       }}>
                         📝 {pagoDetalle.observaciones}
                       </Typography>
+                    </Grid>
+                  )}
+                  
+                  {/* Sección de edición de monto */}
+                  {pagoDetalle.estado === 'pendiente' && (
+                    <Grid item xs={12}>
+                      <Box sx={{ mt: 2, p: 2, bgcolor: 'warning.light', borderRadius: 1 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                          💰 Editar Monto del Pago
+                        </Typography>
+                        {!editandoMonto ? (
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            startIcon={<EditNote />}
+                            onClick={() => {
+                              setEditandoMonto(true);
+                              setNuevoMonto(pagoDetalle.monto.toString());
+                              setMotivoEdicion('');
+                            }}
+                          >
+                            Corregir Monto
+                          </Button>
+                        ) : (
+                          <Box>
+                            <TextField
+                              label="Nuevo Monto ($)"
+                              type="number"
+                              value={nuevoMonto}
+                              onChange={(e) => setNuevoMonto(e.target.value)}
+                              size="small"
+                              sx={{ mr: 1, mb: 1 }}
+                              inputProps={{ min: 0 }}
+                            />
+                            <TextField
+                              label="Motivo de la corrección"
+                              value={motivoEdicion}
+                              onChange={(e) => setMotivoEdicion(e.target.value)}
+                              size="small"
+                              sx={{ mr: 1, mb: 1, minWidth: 200 }}
+                              placeholder="Ej: Cliente pagó monto diferente"
+                            />
+                            <Box sx={{ mt: 1 }}>
+                              <Button
+                                variant="contained"
+                                size="small"
+                                onClick={async () => {
+                                  if (!nuevoMonto || parseFloat(nuevoMonto) <= 0) {
+                                    setMensaje('❌ Ingrese un monto válido');
+                                    return;
+                                  }
+                                  if (!motivoEdicion.trim()) {
+                                    setMensaje('❌ Ingrese el motivo de la corrección');
+                                    return;
+                                  }
+                                  
+                                  try {
+                                    const apiUrl = window.location.hostname.includes('netlify.app') 
+                                      ? 'https://sistema-cocheras-backend.onrender.com/api'
+                                      : 'http://localhost:3000/api';
+                                    
+                                    const { getAuth } = await import('firebase/auth');
+                                    const auth = getAuth();
+                                    const user = auth.currentUser;
+                                    const token = await user.getIdToken();
+                                    
+                                    const response = await fetch(`${apiUrl}/pagos/${pagoDetalle.id}/editar-monto`, {
+                                      method: 'PUT',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${token}`
+                                      },
+                                      body: JSON.stringify({
+                                        nuevoMonto: parseFloat(nuevoMonto),
+                                        motivoEdicion: motivoEdicion,
+                                        montoOriginal: pagoDetalle.monto
+                                      })
+                                    });
+                                    
+                                    if (response.ok) {
+                                      setMensaje('✅ Monto corregido exitosamente');
+                                      setEditandoMonto(false);
+                                      setPagoDetalle({...pagoDetalle, monto: parseFloat(nuevoMonto)});
+                                      await cargarDatos();
+                                    } else {
+                                      throw new Error('Error del servidor');
+                                    }
+                                  } catch (error) {
+                                    setMensaje('❌ Error corrigiendo monto');
+                                  }
+                                }}
+                                sx={{ mr: 1 }}
+                              >
+                                Guardar
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                onClick={() => {
+                                  setEditandoMonto(false);
+                                  setNuevoMonto('');
+                                  setMotivoEdicion('');
+                                }}
+                              >
+                                Cancelar
+                              </Button>
+                            </Box>
+                          </Box>
+                        )}
+                      </Box>
                     </Grid>
                   )}
                 </Grid>
