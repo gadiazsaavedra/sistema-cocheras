@@ -313,14 +313,20 @@ const AdminDashboard = () => {
       const user = auth.currentUser;
       const token = await user.getIdToken();
       
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 segundos timeout
+      
       const response = await fetch(`${apiUrl}/pagos`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(pagoData)
+        body: JSON.stringify(pagoData),
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
       
       if (!response.ok) {
         throw new Error(`Error del servidor: ${response.status}`);
@@ -344,9 +350,14 @@ const AdminDashboard = () => {
       
     } catch (error) {
       console.error('Error registrando pago directo:', error);
-      setMensaje('❌ Error registrando pago directo');
+      if (error.name === 'AbortError') {
+        setMensaje('❌ Timeout: El servidor tardó demasiado en responder');
+      } else {
+        setMensaje('❌ Error registrando pago directo');
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
   
   // Función para filtrar y ordenar clientes - Memoizada para evitar re-cálculos
@@ -1480,15 +1491,15 @@ const AdminDashboard = () => {
               <TextField
                 fullWidth
                 label="Monto del Pago *"
-                type="number"
+                type="text"
                 value={pagoDirectoData.monto}
                 onChange={(e) => {
-                  setPagoDirectoData({...pagoDirectoData, monto: e.target.value});
+                  const valor = e.target.value.replace(/[^0-9]/g, ''); // Solo números
+                  setPagoDirectoData({...pagoDirectoData, monto: valor});
                 }}
                 placeholder={clientePagoDirecto.precio?.toString()}
                 helperText={`Precio sugerido: $${Math.round(clientePagoDirecto.precio || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
                 sx={{ mb: 2 }}
-                inputProps={{ min: 0, step: 1 }}
               />
               
               <FormControl fullWidth sx={{ mb: 2 }}>
