@@ -253,7 +253,10 @@ app.post('/api/pagos', authenticateToken, async (req, res) => {
       monto: parseFloat(req.body.monto),
       empleadoId: req.user.uid,
       fechaRegistro: req.body.fechaRegistro ? 
-        new Date(req.body.fechaRegistro + 'T12:00:00.000Z') : 
+        (() => {
+          const [year, month, day] = req.body.fechaRegistro.split('-');
+          return new Date(parseInt(year), parseInt(month) - 1, parseInt(day), 12, 0, 0);
+        })() : 
         admin.firestore.FieldValue.serverTimestamp(),
       estado: req.body.empleadoNombre?.includes('ADMIN') ? 'confirmado' : 'pendiente'
     };
