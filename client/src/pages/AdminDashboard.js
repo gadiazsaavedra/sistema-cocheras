@@ -78,7 +78,8 @@ const AdminDashboard = () => {
   const [pagoDirectoData, setPagoDirectoData] = useState({
     monto: '',
     tipoPago: 'efectivo',
-    observaciones: ''
+    observaciones: '',
+    fechaPago: new Date().toISOString().split('T')[0] // Fecha actual por defecto
   });
   const [alertaDuplicados, setAlertaDuplicados] = useState({
     open: false,
@@ -296,7 +297,8 @@ const AdminDashboard = () => {
         observaciones: pagoDirectoData.observaciones || 'Pago directo - Admin',
         ubicacion: { lat: 0, lng: 0, admin: true },
         fotoBase64: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
-        empleadoNombre: 'ADMIN - Pago Directo'
+        empleadoNombre: 'ADMIN - Pago Directo',
+        fechaRegistro: new Date(pagoDirectoData.fechaPago).toISOString() // Usar fecha seleccionada
       };
       
       console.log('📦 FRONTEND - Datos a enviar:', pagoData);
@@ -329,7 +331,12 @@ const AdminDashboard = () => {
       setMensaje('✅ Pago directo registrado y aprobado exitosamente');
       setOpenPagoDirecto(false);
       setClientePagoDirecto(null);
-      setPagoDirectoData({ monto: '', tipoPago: 'efectivo', observaciones: '' });
+      setPagoDirectoData({ 
+        monto: '', 
+        tipoPago: 'efectivo', 
+        observaciones: '',
+        fechaPago: new Date().toISOString().split('T')[0]
+      });
       setAlertaDuplicados({ open: false, cliente: null, monto: '', duplicados: {}, onConfirm: null });
       
       // Recargar datos inmediatamente
@@ -841,7 +848,12 @@ const AdminDashboard = () => {
                           startIcon={<Payment />}
                           onClick={() => {
                             setClientePagoDirecto(cliente);
-                            setPagoDirectoData({ monto: '', tipoPago: 'efectivo', observaciones: '' });
+                            setPagoDirectoData({ 
+                              monto: '', 
+                              tipoPago: 'efectivo', 
+                              observaciones: '',
+                              fechaPago: new Date().toISOString().split('T')[0]
+                            });
                             setOpenPagoDirecto(true);
                           }}
                           color="success"
@@ -1456,6 +1468,17 @@ const AdminDashboard = () => {
               
               <TextField
                 fullWidth
+                label="Fecha del Pago *"
+                type="date"
+                value={pagoDirectoData.fechaPago}
+                onChange={(e) => setPagoDirectoData({...pagoDirectoData, fechaPago: e.target.value})}
+                InputLabelProps={{ shrink: true }}
+                helperText="Fecha en que se realizó el pago"
+                sx={{ mb: 2 }}
+              />
+              
+              <TextField
+                fullWidth
                 label="Monto del Pago *"
                 type="number"
                 value={pagoDirectoData.monto}
@@ -1512,7 +1535,12 @@ const AdminDashboard = () => {
             onClick={() => {
               setOpenPagoDirecto(false);
               setClientePagoDirecto(null);
-              setPagoDirectoData({ monto: '', tipoPago: 'efectivo', observaciones: '' });
+              setPagoDirectoData({ 
+                monto: '', 
+                tipoPago: 'efectivo', 
+                observaciones: '',
+                fechaPago: new Date().toISOString().split('T')[0]
+              });
             }}
             size="large"
           >

@@ -13,7 +13,7 @@ export const calcularPeriodosMensuales = (fechaIngreso, diasVencimiento = 30) =>
   let numeroPeriodo = 1;
   
   while (fechaInicioPeriodo.isBefore(hoy) || fechaInicioPeriodo.isSame(hoy, 'day')) {
-    const fechaFinPeriodo = fechaInicioPeriodo.clone().add(diasVencimiento, 'days');
+    const fechaFinPeriodo = fechaInicioPeriodo.clone().add(diasVencimiento - 1, 'days'); // Fin del período
     
     periodos.push({
       numero: numeroPeriodo,
@@ -23,7 +23,7 @@ export const calcularPeriodosMensuales = (fechaIngreso, diasVencimiento = 30) =>
       vencido: fechaFinPeriodo.isBefore(hoy)
     });
     
-    fechaInicioPeriodo = fechaFinPeriodo.clone();
+    fechaInicioPeriodo = fechaInicioPeriodo.clone().add(diasVencimiento, 'days'); // Siguiente período
     numeroPeriodo++;
   }
   
@@ -41,11 +41,12 @@ export const calcularEstadoPeriodos = (periodos, pagos = []) => {
   
   return periodos.map(periodo => {
     // Buscar pago que cubra este período
-    const pagoDelPeriodo = pagosConfirmados.find(pago => 
-      pago.fecha.isBetween(periodo.fechaInicio, periodo.fechaFin, null, '[]') ||
-      pago.fecha.isSame(periodo.fechaInicio, 'day') ||
-      pago.fecha.isSame(periodo.fechaFin, 'day')
-    );
+    const pagoDelPeriodo = pagosConfirmados.find(pago => {
+      const fechaPago = pago.fecha;
+      
+      // El pago debe estar dentro del período (inclusive)
+      return fechaPago.isBetween(periodo.fechaInicio, periodo.fechaFin, 'day', '[]');
+    });
     
     return {
       ...periodo,

@@ -252,7 +252,9 @@ app.post('/api/pagos', authenticateToken, async (req, res) => {
       ...req.body,
       monto: parseFloat(req.body.monto),
       empleadoId: req.user.uid,
-      fechaRegistro: admin.firestore.FieldValue.serverTimestamp(),
+      fechaRegistro: req.body.fechaRegistro ? 
+        admin.firestore.Timestamp.fromDate(new Date(req.body.fechaRegistro)) : 
+        admin.firestore.FieldValue.serverTimestamp(),
       estado: req.body.empleadoNombre?.includes('ADMIN') ? 'confirmado' : 'pendiente'
     };
     
