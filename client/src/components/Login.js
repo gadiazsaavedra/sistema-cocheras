@@ -30,10 +30,17 @@ const Login = () => {
   const { login } = useAuth();
 
   useEffect(() => {
-    // Recuperar email guardado
+    // Recuperar email y contraseña guardados
     const savedEmail = localStorage.getItem('cocheras_email');
+    const savedPassword = localStorage.getItem('cocheras_password');
+    const savedRemember = localStorage.getItem('cocheras_remember') === 'true';
+    
     if (savedEmail) {
       setEmail(savedEmail);
+    }
+    if (savedPassword && savedRemember) {
+      setPassword(savedPassword);
+      setRememberMe(true);
     }
   }, []);
 
@@ -45,11 +52,15 @@ const Login = () => {
     const result = await login(email, password);
     
     if (result.success) {
-      // Guardar email si "recordar" está activado
+      // Guardar credenciales si "recordar" está activado
       if (rememberMe) {
         localStorage.setItem('cocheras_email', email);
+        localStorage.setItem('cocheras_password', password);
+        localStorage.setItem('cocheras_remember', 'true');
       } else {
         localStorage.removeItem('cocheras_email');
+        localStorage.removeItem('cocheras_password');
+        localStorage.removeItem('cocheras_remember');
       }
     } else {
       setError(result.error || 'Error de conexión');
@@ -140,7 +151,7 @@ const Login = () => {
                       color="primary"
                     />
                   }
-                  label="Recordar email"
+                  label="Recordar credenciales"
                   sx={{ mt: 1, mb: 2 }}
                 />
                 

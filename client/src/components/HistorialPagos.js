@@ -16,7 +16,7 @@ import {
   Button,
   IconButton
 } from '@mui/material';
-import { Close, Print } from '@mui/icons-material';
+import { Close, Print, Delete } from '@mui/icons-material';
 import { pagosFirestore } from '../services/firestore';
 import moment from 'moment';
 
@@ -225,6 +225,7 @@ const HistorialPagos = ({ open, onClose, cliente, AlertaAdelanto }) => {
                   <TableCell>Empleado</TableCell>
                   <TableCell>Observaciones</TableCell>
                   <TableCell>Confirmado Por</TableCell>
+                  <TableCell>Acciones</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -273,6 +274,45 @@ const HistorialPagos = ({ open, onClose, cliente, AlertaAdelanto }) => {
                         `${moment(pago.fechaConfirmacion).format('DD/MM HH:mm')}` : 
                         '-'
                       }
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="small"
+                        color="error"
+                        startIcon={<Delete />}
+                        onClick={async () => {
+                          if (window.confirm(`¿Eliminar pago de $${Math.round(pago.monto).toLocaleString()} del ${moment(pago.fechaRegistro).format('DD/MM/YYYY')}?`)) {
+                            try {
+                              const { getAuth } = await import('firebase/auth');
+                              const auth = getAuth();
+                              const user = auth.currentUser;
+                              const token = await user.getIdToken();
+                              
+                              const apiUrl = window.location.hostname.includes('netlify.app') 
+                                ? 'https://sistema-cocheras-backend.onrender.com/api'
+                                : 'http://localhost:3000/api';
+                              
+                              const response = await fetch(`${apiUrl}/pagos/${pago.id}`, {
+                                method: 'DELETE',
+                                headers: {
+                                  'Authorization': `Bearer ${token}`
+                                }
+                              });
+                              
+                              if (response.ok) {
+                                cargarHistorial(); // Recargar historial
+                              } else {
+                                alert('Error eliminando pago');
+                              }
+                            } catch (error) {
+                              console.error('Error:', error);
+                              alert('Error eliminando pago');
+                            }
+                          }
+                        }}
+                      >
+                        Eliminar
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}

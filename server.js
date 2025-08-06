@@ -568,6 +568,28 @@ app.put('/api/pagos/:id/editar-monto', authenticateToken, async (req, res) => {
   }
 });
 
+// Ruta para eliminar pago
+app.delete('/api/pagos/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`Eliminando pago ${id} por ${req.user.email}`);
+    
+    // Verificar que sea administrador
+    const adminEmails = ['gadiazsaavedra@gmail.com', 'c.andrea.lopez@hotmail.com'];
+    if (!adminEmails.includes(req.user.email)) {
+      return res.status(403).json({ error: 'Solo administradores pueden eliminar pagos' });
+    }
+    
+    await db.collection('pagos').doc(id).delete();
+    console.log(`Pago ${id} eliminado exitosamente`);
+    
+    res.json({ message: 'Pago eliminado exitosamente' });
+  } catch (error) {
+    console.error('Error eliminando pago:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Health check para Render
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
