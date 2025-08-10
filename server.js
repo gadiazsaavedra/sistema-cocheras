@@ -166,7 +166,20 @@ app.post('/api/clientes', authenticateToken, async (req, res) => {
 
 app.put('/api/clientes/:id', authenticateToken, async (req, res) => {
   try {
-    await db.collection('clientes').doc(req.params.id).update(req.body);
+    const updateData = { ...req.body };
+    
+    // Si se están eliminando campos de adelanto, usar FieldValue.delete()
+    if (req.body.mesesAdelantados === null) {
+      updateData.mesesAdelantados = admin.firestore.FieldValue.delete();
+    }
+    if (req.body.fechaVencimientoAdelanto === null) {
+      updateData.fechaVencimientoAdelanto = admin.firestore.FieldValue.delete();
+    }
+    if (req.body.ultimoPagoAdelantado === null) {
+      updateData.ultimoPagoAdelantado = admin.firestore.FieldValue.delete();
+    }
+    
+    await db.collection('clientes').doc(req.params.id).update(updateData);
     res.json({ message: 'Cliente actualizado' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -247,6 +260,16 @@ app.post('/api/pagos', authenticateToken, async (req, res) => {
     console.log('📥 Recibiendo pago:', req.body);
     console.log('💰 Monto original:', req.body.monto, 'tipo:', typeof req.body.monto);
     console.log('💰 Monto parseado:', parseFloat(req.body.monto));
+    console.log('🆔 ClienteId recibido:', req.body.clienteId);
+    console.log('👤 ClienteNombre recibido:', req.body.clienteNombre);
+    
+    // Verificar que el cliente existe
+    const clienteRef = await db.collection('clientes').doc(req.body.clienteId).get();
+    if (!clienteRef.exists) {
+      console.log('❌ Cliente no encontrado:', req.body.clienteId);
+      return res.status(400).json({ error: 'Cliente no encontrado' });
+    }
+    console.log('✅ Cliente encontrado:', clienteRef.data().nombre, clienteRef.data().apellido);
     
     const pagoData = {
       ...req.body,
@@ -268,8 +291,17 @@ app.post('/api/pagos', authenticateToken, async (req, res) => {
     }
     
     console.log('💾 Guardando pago en Firestore...');
+    console.log('🔍 Datos finales a guardar:', JSON.stringify(pagoData, null, 2));
     const docRef = await db.collection('pagos').add(pagoData);
     console.log('✅ Pago guardado con ID:', docRef.id);
+    
+    // Verificar que se guardó correctamente
+    const pagoGuardado = await docRef.get();
+    const pagoData2 = pagoGuardado.data();
+    console.log('🔍 Pago verificado en BD - ClienteId:', pagoData2.clienteId);
+    console.log('🔍 Pago verificado en BD - ClienteNombre:', pagoData2.clienteNombre);
+    console.log('🔍 Pago verificado en BD - Monto:', pagoData2.monto);
+    console.log('🔍 Pago verificado en BD - Estado:', pagoData2.estado);
     
     // Enviar notificación por email a administradores
     console.log('📧 Enviando notificación por email...');
@@ -589,6 +621,68 @@ app.delete('/api/pagos/:id', authenticateToken, async (req, res) => {
     res.json({ message: 'Pago eliminado exitosamente' });
   } catch (error) {
     console.error('Error eliminando pago:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Ruta específica para eliminar adelanto
+app.delete('/api/clientes/:id/adelanto', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`Eliminando adelanto del cliente ${id}`);
+    
+    // Verificar cliente existe
+    const clienteRef = db.collection('clientes').doc(id);
+    const clienteDoc = await clienteRef.get();
+    
+    if (!clienteDoc.exists) {
+      return res.status(404).json({ error: 'Cliente no encontrado' });
+    }
+    
+    console.log('Cliente antes:', clienteDoc.data());
+    
+    // Eliminar campos de adelanto
+    await clienteRef.update({
+      mesesAdelantados: admin.firestore.FieldValue.delete(),
+      fechaVencimientoAdelanto: admin.firestore.FieldValue.delete(),
+      ultimoPagoAdelantado: admin.firestore.FieldValue.delete()
+    });
+    
+    // Verificar que se eliminó
+    const clienteActualizado = await clienteRef.get();
+    console.log('Cliente después:', clienteActualizado.data());
+    
+    res.json({ message: 'Adelanto eliminado exitosamente' });
+  } catch (error) {
+    console.error('Error eliminando adelanto:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Ruta temporal para eliminar adelanto de Edgardo
+app.get('/api/debug/eliminar-adelanto-edgardo', authenticateToken, async (req, res) => {
+  try {
+    const clienteId = '4qB2JYBpAdpXpXl5wG0Q';
+    const clienteRef = db.collection('clientes').doc(clienteId);
+    
+    const antes = await clienteRef.get();
+    console.log('Edgardo antes:', antes.data());
+    
+    await clienteRef.update({
+      mesesAdelantados: admin.firestore.FieldValue.delete(),
+      fechaVencimientoAdelanto: admin.firestore.FieldValue.delete(),
+      ultimoPagoAdelantado: admin.firestore.FieldValue.delete()
+    });
+    
+    const despues = await clienteRef.get();
+    console.log('Edgardo después:', despues.data());
+    
+    res.json({ 
+      message: 'Adelanto eliminado',
+      antes: antes.data(),
+      despues: despues.data()
+    });
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });

@@ -286,7 +286,7 @@ export const pagosFirestore = {
   },
 
   obtener: async (filtros = {}) => {
-    const { limite = 50, ultimoDoc = null, estado = null, empleadoId = null } = filtros;
+    const { limite = 200, ultimoDoc = null, estado = null, empleadoId = null } = filtros;
     
     let q = query(
       collection(db, 'pagos'),

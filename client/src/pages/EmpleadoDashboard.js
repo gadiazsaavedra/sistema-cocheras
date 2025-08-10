@@ -45,6 +45,7 @@ import { calcularEstadoCliente, getEstadoTexto } from '../utils/morosidad';
 import ClienteItem from '../components/MemoizedClienteItem';
 import { getVersionDisplay } from '../utils/version';
 import VersionInfo from '../components/VersionInfo';
+import CalculadoraAlquilerTemporal from '../components/CalculadoraAlquilerTemporal';
 
 // Lazy loading del componente de cámara
 const CameraCapture = lazy(() => import('../components/CameraCapture'));
@@ -98,8 +99,19 @@ const EmpleadoDashboard = () => {
       const response = await clientesFirestore.obtener({ limite: 100 });
       const todosClientes = response.datos || response;
       
-      console.log('Todos los clientes:', todosClientes);
+      console.log('=== DEBUG EMPLEADO VICTOR ===');
       console.log('Usuario email:', user?.email);
+      console.log('Total clientes en sistema:', todosClientes.length);
+      
+      // Buscar Edgardo específicamente
+      const edgardo = todosClientes.find(c => c.nombre?.includes('Edgardo'));
+      if (edgardo) {
+        console.log('Edgardo encontrado:', edgardo.nombre, edgardo.apellido);
+        console.log('Empleado asignado a Edgardo:', edgardo.empleadoAsignado);
+        console.log('¿Coincide con Victor?', edgardo.empleadoAsignado === user.email);
+      } else {
+        console.log('Edgardo NO encontrado en el sistema');
+      }
       
       // Debug: ver todos los empleadoAsignado únicos
       const empleadosUnicos = [...new Set(todosClientes.map(c => c.empleadoAsignado).filter(Boolean))];
@@ -119,7 +131,12 @@ const EmpleadoDashboard = () => {
         }) : 
         todosClientes; // Mostrar todos si no hay asignaciones
       
-      console.log('Clientes filtrados:', clientesFiltrados);
+      console.log('Clientes filtrados para Victor:', clientesFiltrados.length);
+      clientesFiltrados.forEach(c => {
+        console.log('Cliente asignado a Victor:', c.nombre, c.apellido, 'Empleado:', c.empleadoAsignado);
+      });
+      console.log('=== FIN DEBUG VICTOR ===');
+      
       setClientes(clientesFiltrados);
     } catch (error) {
       console.error('Error cargando clientes:', error);
@@ -132,9 +149,10 @@ const EmpleadoDashboard = () => {
 
   const cargarPagos = async () => {
     try {
+      // CORREGIDO: Cargar TODOS los pagos para calcular morosidad correctamente
+      // No filtrar por empleadoId porque necesitamos ver todos los pagos de todos los empleados
       const response = await pagosFirestore.obtener({ 
-        empleadoId: user?.uid,
-        limite: 50 
+        limite: 100 
       });
       const pagosData = response.datos || response;
       setTodosLosPagos(pagosData);
@@ -252,11 +270,11 @@ const EmpleadoDashboard = () => {
       return;
     }
 
-    // Si no hay ubicación, intentar obtenerla pero no bloquear el registro
+    // Si no hay ubicación, usar coordenadas por defecto
     if (!ubicacion) {
-      setMensaje('⚡ Registrando pago sin GPS...');
+      setMensaje('⚡ Registrando pago sin GPS - ubicación no disponible');
       setSnackbarOpen(true);
-      obtenerUbicacion(); // Intentar en background
+      setUbicacion({ lat: 0, lng: 0, error: 'GPS desactivado por empleado', timestamp: Date.now() });
     }
     
     // Validar monto mínimo para clientes morosos
@@ -296,7 +314,7 @@ const EmpleadoDashboard = () => {
         empleadoNombre: user.email,
         fechaRegistro: new Date().toISOString(),
         estado: 'pendiente',
-        ubicacion: ubicacion || { lat: 0, lng: 0, error: 'Sin GPS', timestamp: Date.now() },
+        ubicacion: ubicacion || { lat: 0, lng: 0, error: 'GPS no disponible', timestamp: Date.now() },
         fotoBase64: fotoBase64
       };
 
@@ -521,7 +539,12 @@ const EmpleadoDashboard = () => {
                               🚗 {cliente.tipoVehiculo} - 🏠 {cliente.numeroCochera}
                             </Typography>
                             <Typography variant="body2" sx={{ color: 'error.main', fontWeight: 'bold' }}>
-                              💰 Debe: ${cliente.precio?.toLocaleString()}
+                              💰 Debe: ${(() => {
+                                const precioAUsar = cliente.esClienteAntiguo && cliente.precioBase ? 
+                                  parseFloat(cliente.precioBase) : 
+                                  (cliente.precio || 0);
+                                return precioAUsar.toLocaleString();
+                              })()}
                             </Typography>
                           </Box>
                         }
@@ -620,15 +643,31 @@ const EmpleadoDashboard = () => {
                           cliente.tipoVehiculo?.toLowerCase().includes(busqueda)
                         );
                       })
+                      .map(cliente => ({
+                        ...cliente,
+                        estadoMorosidad: calcularEstadoCliente(cliente, todosLosPagos)
+                      }))
+                      .sort((a, b) => {
+                        // Ordenar por prioridad de morosidad: morosos primero
+                        const prioridadEstado = { moroso: 0, vencido: 1, por_vencer: 2, al_dia: 3, sin_fecha: 4 };
+                        const prioridadA = prioridadEstado[a.estadoMorosidad.estado] || 5;
+                        const prioridadB = prioridadEstado[b.estadoMorosidad.estado] || 5;
+                        
+                        if (prioridadA !== prioridadB) {
+                          return prioridadA - prioridadB;
+                        }
+                        
+                        // Si tienen el mismo estado, ordenar por nombre
+                        return `${a.nombre} ${a.apellido}`.localeCompare(`${b.nombre} ${b.apellido}`);
+                      })
                       .map((cliente) => {
-                      const estadoMorosidad = calcularEstadoCliente(cliente, todosLosPagos);
-                      const esMoroso = estadoMorosidad.estado === 'moroso' || estadoMorosidad.estado === 'vencido';
+                      const esMoroso = cliente.estadoMorosidad.estado === 'moroso' || cliente.estadoMorosidad.estado === 'vencido';
                       
                       return (
                         <ClienteItem
                           key={cliente.id}
                           cliente={cliente}
-                          estadoMorosidad={estadoMorosidad}
+                          estadoMorosidad={cliente.estadoMorosidad}
                           esMoroso={esMoroso}
                           isMobile={isMobile}
                           onRegistrarPago={handleRegistrarPago}
@@ -661,6 +700,11 @@ const EmpleadoDashboard = () => {
               </CardContent>
             </Card>
           </Grid>
+        </Grid>
+        
+        {/* Calculadora de Alquiler Temporal */}
+        <Grid item xs={12} sx={{ mt: 3 }}>
+          <CalculadoraAlquilerTemporal />
         </Grid>
       </Container>
 

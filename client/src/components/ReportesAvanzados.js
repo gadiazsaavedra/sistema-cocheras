@@ -36,10 +36,10 @@ const ReportesAvanzados = () => {
   const [cargando, setCargando] = useState(false);
 
   const empleados = [
-    { email: 'victor@empresa.com', nombre: 'Victor' },
-    { email: 'raul@empresa.com', nombre: 'Raul' },
-    { email: 'carlos@empresa.com', nombre: 'Carlos' },
-    { email: 'fernando@empresa.com', nombre: 'Fernando' }
+    { email: 'victor.cocheras@sistema.local', nombre: 'Victor' },
+    { email: 'raul.cocheras@sistema.local', nombre: 'Raul' },
+    { email: 'carlos.cocheras@sistema.local', nombre: 'Carlos' },
+    { email: 'fernando.cocheras@sistema.local', nombre: 'Fernando' }
   ];
 
   const generarReporte = async () => {
@@ -107,18 +107,40 @@ const ReportesAvanzados = () => {
 
   const generarReportePorEmpleado = (clientes, pagos, empleadoEmail) => {
     const clientesEmpleado = clientes.filter(c => c.empleadoAsignado === empleadoEmail);
-    const pagosEmpleado = pagos.filter(p => p.empleadoId === empleadoEmail);
+    
+    console.log('=== DEBUG REPORTE EMPLEADO ===');
+    console.log('Empleado buscado:', empleadoEmail);
+    console.log('Clientes del empleado:', clientesEmpleado.length);
+    console.log('Total pagos en sistema:', pagos.length);
+    
+    // Buscar pagos tanto por empleadoId como por empleadoNombre
+    const pagosEmpleado = pagos.filter(p => 
+      p.empleadoId === empleadoEmail || 
+      p.empleadoNombre?.toLowerCase().includes('victor')
+    );
+    
+    console.log('Pagos encontrados para empleado:', pagosEmpleado.length);
+    pagosEmpleado.forEach(p => {
+      console.log('Pago:', p.clienteNombre, p.monto, p.empleadoNombre, p.empleadoId);
+    });
+    
     const pagosRechazados = pagosEmpleado.filter(p => p.estado === 'rechazado');
+    
+    const pagosConfirmados = pagosEmpleado.filter(p => p.estado === 'confirmado');
+    const cobrosHoy = pagosEmpleado.filter(p => 
+      moment(p.fechaRegistro).isSame(moment(), 'day') && p.estado === 'confirmado'
+    ).length;
+    const montoTotal = pagosConfirmados.reduce((sum, p) => sum + (p.monto || 0), 0);
+    
+    console.log('Pagos confirmados:', pagosConfirmados.length);
+    console.log('Cobros hoy:', cobrosHoy);
+    console.log('Monto total:', montoTotal);
     
     return {
       empleado: empleados.find(e => e.email === empleadoEmail)?.nombre || 'Empleado',
       totalClientes: clientesEmpleado.length,
-      cobrosHoy: pagosEmpleado.filter(p => 
-        moment(p.fechaRegistro).isSame(moment(), 'day')
-      ).length,
-      montoTotal: pagosEmpleado
-        .filter(p => p.estado === 'confirmado')
-        .reduce((sum, p) => sum + p.monto, 0),
+      cobrosHoy: cobrosHoy,
+      montoTotal: montoTotal,
       pagosRechazados: pagosRechazados.length,
       clientes: clientesEmpleado.map(cliente => {
         const estadoInfo = calcularEstadoCliente(cliente, pagos);
@@ -194,7 +216,7 @@ const ReportesAvanzados = () => {
           `).join('')}
         </table>
         <p><strong>Total cobros: ${datosReporte.length}</strong></p>
-        <p><strong>Monto total: $${datosReporte.reduce((sum, item) => sum + item.monto, 0).toLocaleString()}</strong></p>
+        <p><strong>Monto total: $${datosReporte.reduce((sum, item) => sum + (item.monto || 0), 0).toLocaleString()}</strong></p>
       </body>
     </html>
   `;
@@ -210,7 +232,7 @@ const ReportesAvanzados = () => {
           ${datosReporte.map(cliente => `
             <tr><td>${cliente.nombre} ${cliente.apellido}</td><td>${cliente.telefono}</td>
             <td>${cliente.empleadoAsignado?.split('@')[0] || 'Sin asignar'}</td>
-            <td>${cliente.estadoInfo.diasVencido}</td><td>$${cliente.precio}</td></tr>
+            <td>${cliente.estadoInfo.diasVencido}</td><td>$${(cliente.precio || 0).toLocaleString()}</td></tr>
           `).join('')}
         </table>
       </body>
@@ -374,7 +396,7 @@ const ReportesAvanzados = () => {
                 {tipoReporte === 'cobros_dia' && datosReporte.map((item, index) => (
                   <TableRow key={index}>
                     <TableCell>{item.cliente}</TableCell>
-                    <TableCell>${item.monto.toLocaleString()}</TableCell>
+                    <TableCell>${(item.monto || 0).toLocaleString()}</TableCell>
                     <TableCell>{item.empleado}</TableCell>
                     <TableCell>{item.hora}</TableCell>
                     <TableCell>{item.tipo}</TableCell>
@@ -389,11 +411,11 @@ const ReportesAvanzados = () => {
                     <TableCell>
                       <Chip 
                         label={getEstadoTexto(cliente.estadoInfo)} 
-                        color={cliente.estadoInfo.color} 
+                        color={cliente.estadoInfo?.color || 'default'} 
                         size="small" 
                       />
                     </TableCell>
-                    <TableCell>{cliente.estadoInfo.diasVencido} días</TableCell>
+                    <TableCell>{cliente.estadoInfo?.diasVencido || 0} días</TableCell>
                   </TableRow>
                 ))}
 
@@ -404,12 +426,12 @@ const ReportesAvanzados = () => {
                     <TableCell>
                       <Chip 
                         label={getEstadoTexto(cliente.estadoInfo)} 
-                        color={cliente.estadoInfo.color} 
+                        color={cliente.estadoInfo?.color || 'default'} 
                         size="small" 
                       />
                     </TableCell>
                     <TableCell>{cliente.ultimoPago}</TableCell>
-                    <TableCell>${cliente.precio?.toLocaleString()}</TableCell>
+                    <TableCell>${(cliente.precio || 0).toLocaleString()}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -466,7 +488,7 @@ const ReportesAvanzados = () => {
                       {datosReporte.rechazados.map((rechazo, index) => (
                         <TableRow key={index}>
                           <TableCell>{rechazo.cliente}</TableCell>
-                          <TableCell>${rechazo.monto.toLocaleString()}</TableCell>
+                          <TableCell>${(rechazo.monto || 0).toLocaleString()}</TableCell>
                           <TableCell>{rechazo.fecha}</TableCell>
                           <TableCell>{rechazo.motivo}</TableCell>
                         </TableRow>

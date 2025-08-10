@@ -254,10 +254,10 @@ const ClienteForm = ({ open, onClose, onSave, cliente = null }) => {
                   onChange={(e) => handleChange('empleadoAsignado', e.target.value)}
                 >
                   <MenuItem value="">Sin asignar</MenuItem>
-                  <MenuItem value="victor@empresa.com">Victor</MenuItem>
-                  <MenuItem value="raul@empresa.com">Raul</MenuItem>
-                  <MenuItem value="carlos@empresa.com">Carlos</MenuItem>
-                  <MenuItem value="fernando@empresa.com">Fernando</MenuItem>
+                  <MenuItem value="victor.cocheras@sistema.local">Victor</MenuItem>
+                  <MenuItem value="raul.cocheras@sistema.local">Raul</MenuItem>
+                  <MenuItem value="carlos.cocheras@sistema.local">Carlos</MenuItem>
+                  <MenuItem value="fernando.cocheras@sistema.local">Fernando</MenuItem>
                 </Select>
               </FormControl>
             </Grid>

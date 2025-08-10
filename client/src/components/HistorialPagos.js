@@ -30,11 +30,29 @@ const HistorialPagos = ({ open, onClose, cliente, AlertaAdelanto }) => {
     }
   }, [open, cliente]);
 
+  const [clienteActualizado, setClienteActualizado] = useState(cliente);
+
   const cargarHistorial = async () => {
     setCargando(true);
     try {
-      const response = await pagosFirestore.obtener({ limite: 100 });
+      // Recargar datos del cliente
+      const { clientesFirestore } = await import('../services/firestore');
+      const clienteResponse = await clientesFirestore.obtener();
+      const todosClientes = clienteResponse.datos || clienteResponse;
+      const clienteActual = todosClientes.find(c => c.id === cliente.id);
+      if (clienteActual) {
+        setClienteActualizado(clienteActual);
+      }
+      
+      // Forzar recarga de pagos sin cache
+      const response = await pagosFirestore.obtener({ 
+        limite: 200,
+        timestamp: Date.now() // Evitar cache
+      });
       const todosPagos = response.datos || response;
+      
+      console.log('Total pagos cargados:', todosPagos.length);
+      console.log('Buscando pagos para cliente:', cliente.id);
       
       // Asegurar que todosPagos es un array
       if (!Array.isArray(todosPagos)) {
@@ -44,9 +62,16 @@ const HistorialPagos = ({ open, onClose, cliente, AlertaAdelanto }) => {
       }
       
       const pagosCliente = todosPagos
-        .filter(pago => pago.clienteId === cliente.id)
+        .filter(pago => {
+          const esDelCliente = pago.clienteId === cliente.id;
+          if (esDelCliente) {
+            console.log('Pago encontrado:', pago.id, pago.monto, pago.fechaRegistro);
+          }
+          return esDelCliente;
+        })
         .sort((a, b) => new Date(b.fechaRegistro) - new Date(a.fechaRegistro));
-      console.log('Pagos del cliente:', pagosCliente);
+      
+      console.log('Pagos del cliente final:', pagosCliente.length);
       setPagos(pagosCliente);
     } catch (error) {
       console.error('Error cargando historial:', error);
@@ -170,6 +195,54 @@ const HistorialPagos = ({ open, onClose, cliente, AlertaAdelanto }) => {
             Historial de Pagos - {cliente.nombre} {cliente.apellido}
           </Typography>
           <Box>
+            <button 
+              onClick={async () => {
+                if (!window.confirm('¿Eliminar el adelanto de este cliente?')) return;
+                
+                try {
+                  const { getAuth } = await import('firebase/auth');
+                  const auth = getAuth();
+                  const user = auth.currentUser;
+                  const token = await user.getIdToken();
+                  
+                  const apiUrl = window.location.hostname.includes('netlify.app') 
+                    ? 'https://sistema-cocheras-backend.onrender.com/api'
+                    : 'http://localhost:3000/api';
+                  
+                  const response = await fetch(`${apiUrl}/clientes/${cliente.id}`, {
+                    method: 'PUT',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                      mesesAdelantados: null,
+                      fechaVencimientoAdelanto: null,
+                      ultimoPagoAdelantado: null
+                    })
+                  });
+                  
+                  if (response.ok) {
+                    window.location.reload();
+                  }
+                } catch (error) {
+                  console.error('Error:', error);
+                }
+              }}
+              style={{ 
+                background: '#ff4444', 
+                border: 'none', 
+                color: 'white', 
+                cursor: 'pointer',
+                fontSize: '12px',
+                padding: '6px 12px',
+                borderRadius: '4px',
+                fontWeight: 'bold',
+                marginRight: '8px'
+              }}
+            >
+              ❌ ELIMINAR ADELANTO
+            </button>
             <Button
               startIcon={<Print />}
               onClick={imprimirHistorial}
@@ -186,8 +259,12 @@ const HistorialPagos = ({ open, onClose, cliente, AlertaAdelanto }) => {
       </DialogTitle>
       
       <DialogContent>
+
+        
         {/* Alerta de Adelanto */}
-        {AlertaAdelanto && <AlertaAdelanto cliente={cliente} />}
+        {AlertaAdelanto && clienteActualizado?.mesesAdelantados && clienteActualizado?.fechaVencimientoAdelanto && (
+          <AlertaAdelanto cliente={clienteActualizado} />
+        )}
         {/* Estadísticas */}
         <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
           <Paper sx={{ p: 2, flex: 1, textAlign: 'center' }}>

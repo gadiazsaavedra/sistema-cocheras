@@ -20,18 +20,64 @@ import {
 import { calcularPeriodosMensuales, calcularEstadoPeriodos } from '../utils/morosidad';
 import moment from 'moment';
 
-const DetalleMorosidad = ({ open, onClose, cliente, pagos = [] }) => {
+const DetalleMorosidad = ({ open, onClose, cliente, pagos: pagosProps = [] }) => {
   const [periodos, setPeriodos] = useState([]);
+  const [pagosCliente, setPagosCliente] = useState([]);
+  const [cargandoPagos, setCargandoPagos] = useState(false);
+  
+  // Cargar pagos específicos del cliente
+  useEffect(() => {
+    if (open && cliente) {
+      cargarPagosCliente();
+    }
+  }, [open, cliente]);
+  
+  // Recargar cada vez que se abre el dialog
+  useEffect(() => {
+    if (open) {
+      setPagosCliente([]);
+      setPeriodos([]);
+    }
+  }, [open]);
+  
+  const cargarPagosCliente = async () => {
+    setCargandoPagos(true);
+    try {
+      const { pagosFirestore } = await import('../services/firestore');
+      const response = await pagosFirestore.obtener({ limite: 200 });
+      const todosPagos = response.datos || response;
+      
+      const pagosDelCliente = todosPagos.filter(p => p.clienteId === cliente.id);
+      console.log(`Pagos cargados para ${cliente.nombre}:`, pagosDelCliente.length);
+      
+      // Debug específico para Armando
+      if (cliente.nombre?.includes('Armando')) {
+        console.log('=== DEBUG PAGOS ARMANDO DETALLE ===');
+        console.log('ID del cliente:', cliente.id);
+        console.log('Total pagos en sistema:', todosPagos.length);
+        console.log('Pagos del cliente encontrados:', pagosDelCliente.length);
+        pagosDelCliente.forEach((p, i) => {
+          console.log(`Pago ${i+1}: ${p.fechaRegistro} - Estado: ${p.estado} - Monto: ${p.monto}`);
+        });
+        console.log('=== FIN DEBUG PAGOS ARMANDO ===');
+      }
+      
+      setPagosCliente(pagosDelCliente);
+    } catch (error) {
+      console.error('Error cargando pagos del cliente:', error);
+      setPagosCliente([]);
+    }
+    setCargandoPagos(false);
+  };
 
   useEffect(() => {
-    if (cliente && cliente.fechaIngreso) {
+    if (cliente && cliente.fechaIngreso && pagosCliente.length >= 0) {
       const diasVencimiento = cliente.diasVencimiento || 30;
       const periodosCalculados = calcularPeriodosMensuales(cliente.fechaIngreso, diasVencimiento);
-      const pagosCliente = pagos.filter(p => p.clienteId === cliente.id);
       const periodosConEstado = calcularEstadoPeriodos(periodosCalculados, pagosCliente);
       setPeriodos(periodosConEstado);
     }
-  }, [cliente, pagos]);
+  }, [cliente, pagosCliente]);
 
   if (!cliente) return null;
 

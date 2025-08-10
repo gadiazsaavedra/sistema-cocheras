@@ -25,35 +25,88 @@ const AlertaAdelanto = ({ cliente }) => {
     return '🟢 Adelanto vigente';
   };
 
+  const eliminarAdelanto = async () => {
+    if (!window.confirm('¿Eliminar el adelanto de este cliente?')) return;
+    
+    try {
+      const { getAuth } = await import('firebase/auth');
+      const auth = getAuth();
+      const user = auth.currentUser;
+      const token = await user.getIdToken();
+      
+      const apiUrl = window.location.hostname.includes('netlify.app') 
+        ? 'https://sistema-cocheras-backend.onrender.com/api'
+        : 'http://localhost:3000/api';
+      
+      const response = await fetch(`${apiUrl}/clientes/${cliente.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          mesesAdelantados: null,
+          fechaVencimientoAdelanto: null,
+          ultimoPagoAdelantado: null
+        })
+      });
+      
+      if (response.ok) {
+        window.location.reload();
+      }
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  };
+
   return (
-    <Alert 
-      severity={getSeverity()} 
-      sx={{ mb: 2 }}
-      icon={<Schedule />}
-    >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-        <Typography variant="body2">
-          <strong>{getMensaje()}</strong>
-        </Typography>
-        <Chip 
-          label={`${cliente.mesesAdelantados} meses pagados`}
-          size="small"
-          color={getSeverity()}
-        />
-        <Chip 
-          label={`Válido hasta: ${fechaVencimiento.toLocaleDateString('es-AR')}`}
-          size="small"
-          variant="outlined"
-        />
-        {diasRestantes > 0 && (
+    <>
+      <Alert 
+        severity={getSeverity()} 
+        sx={{ mb: 1 }}
+        icon={<Schedule />}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          <Typography variant="body2">
+            <strong>{getMensaje()}</strong>
+          </Typography>
           <Chip 
-            label={`${diasRestantes} días restantes`}
+            label={`${cliente.mesesAdelantados} meses pagados`}
             size="small"
             color={getSeverity()}
           />
-        )}
+          <Chip 
+            label={`Válido hasta: ${fechaVencimiento.toLocaleDateString('es-AR')}`}
+            size="small"
+            variant="outlined"
+          />
+          {diasRestantes > 0 && (
+            <Chip 
+              label={`${diasRestantes} días restantes`}
+              size="small"
+              color={getSeverity()}
+            />
+          )}
+        </Box>
+      </Alert>
+      <Box sx={{ mb: 2, textAlign: 'center' }}>
+        <button 
+          onClick={eliminarAdelanto}
+          style={{ 
+            background: '#ff4444', 
+            border: 'none', 
+            color: 'white', 
+            cursor: 'pointer',
+            fontSize: '14px',
+            padding: '8px 16px',
+            borderRadius: '4px',
+            fontWeight: 'bold'
+          }}
+        >
+          ❌ ELIMINAR ADELANTO
+        </button>
       </Box>
-    </Alert>
+    </>
   );
 };
 

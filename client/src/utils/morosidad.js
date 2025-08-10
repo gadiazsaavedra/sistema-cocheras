@@ -9,11 +9,28 @@ export const calcularPeriodosMensuales = (fechaIngreso, diasVencimiento = 30) =>
   const hoy = moment();
   const periodos = [];
   
+  // Debug para Armando
+  if (inicio.format('DD/MM/YYYY') === '07/06/2025') {
+    console.log('=== DEBUG ARMANDO PERÍODOS ===');
+    console.log('Fecha ingreso:', inicio.format('DD/MM/YYYY'));
+    console.log('Hoy:', hoy.format('DD/MM/YYYY'));
+    console.log('Días vencimiento:', diasVencimiento);
+  }
+  
   let fechaInicioPeriodo = inicio.clone();
   let numeroPeriodo = 1;
   
-  while (fechaInicioPeriodo.isBefore(hoy) || fechaInicioPeriodo.isSame(hoy, 'day')) {
+  // Generar períodos hasta hoy + 1 mes adicional para cubrir pagos futuros
+  const fechaLimite = hoy.clone().add(1, 'month');
+  
+  while (fechaInicioPeriodo.isBefore(fechaLimite)) {
     const fechaFinPeriodo = fechaInicioPeriodo.clone().add(diasVencimiento - 1, 'days'); // Fin del período
+    
+    // Debug para Armando
+    if (inicio.format('DD/MM/YYYY') === '07/06/2025') {
+      console.log(`Período ${numeroPeriodo}: ${fechaInicioPeriodo.format('DD/MM/YYYY')} - ${fechaFinPeriodo.format('DD/MM/YYYY')}`);
+      console.log('Vencido:', fechaFinPeriodo.isBefore(hoy));
+    }
     
     periodos.push({
       numero: numeroPeriodo,
@@ -27,6 +44,12 @@ export const calcularPeriodosMensuales = (fechaIngreso, diasVencimiento = 30) =>
     numeroPeriodo++;
   }
   
+  // Debug para Armando
+  if (inicio.format('DD/MM/YYYY') === '07/06/2025') {
+    console.log('Total períodos generados:', periodos.length);
+    console.log('=== FIN DEBUG ARMANDO ===');
+  }
+  
   return periodos;
 };
 
@@ -37,24 +60,72 @@ export const calcularEstadoPeriodos = (periodos, pagos = []) => {
     .map(pago => ({
       ...pago,
       fecha: moment(pago.fechaRegistro)
-    }));
+    }))
+    .sort((a, b) => a.fecha - b.fecha); // Ordenar por fecha
   
-  return periodos.map(periodo => {
-    // Buscar pago que cubra este período
-    const pagoDelPeriodo = pagosConfirmados.find(pago => {
-      const fechaPago = pago.fecha;
+  // Debug para Armando
+  const esArmando = pagos.length > 0 && (pagos[0].clienteNombre?.includes('Armando') || pagos.some(p => p.clienteNombre?.includes('Armando')));
+  if (esArmando) {
+    console.log('=== DEBUG ASIGNACIÓN ARMANDO ===');
+    console.log('Total pagos recibidos:', pagos.length);
+    console.log('Pagos confirmados:', pagosConfirmados.length);
+    pagosConfirmados.forEach((p, i) => {
+      console.log(`Pago ${i+1}: ${p.fecha.format('DD/MM/YYYY')} - $${p.monto} - Estado: ${p.estado}`);
+    });
+    console.log('Períodos disponibles:', periodos.length);
+    periodos.forEach((p, i) => {
+      console.log(`Período ${i+1}: ${p.fechaInicio.format('DD/MM/YYYY')} - ${p.fechaFin.format('DD/MM/YYYY')} (Vence: ${p.fechaVencimiento.format('DD/MM/YYYY')})`);
+    });
+  }
+  
+  // Inicializar períodos
+  const periodosConEstado = periodos.map(periodo => ({
+    ...periodo,
+    estado: 'SIN_PAGO',
+    pago: null,
+    diasVencido: periodo.vencido ? moment().diff(periodo.fechaVencimiento, 'days') : 0
+  }));
+  
+  // Asignar pagos secuencialmente a períodos
+  // Cada pago se asigna al primer período disponible
+  pagosConfirmados.forEach((pago, index) => {
+    const periodoDisponible = periodosConEstado.find(p => p.estado === 'SIN_PAGO');
+    
+    // Debug para Armando
+    if (esArmando) {
+      console.log(`\n--- Asignando pago ${index+1} ---`);
+      console.log(`Pago: ${pago.fecha.format('DD/MM/YYYY')} - $${pago.monto}`);
+      console.log(`Período disponible: ${periodoDisponible ? `${periodoDisponible.numero} (${periodoDisponible.fechaInicio.format('DD/MM/YYYY')} - ${periodoDisponible.fechaFin.format('DD/MM/YYYY')})` : 'NINGUNO'}`);
       
-      // El pago debe estar dentro del período (inclusive)
-      return fechaPago.isBetween(periodo.fechaInicio, periodo.fechaFin, 'day', '[]');
+      if (!periodoDisponible) {
+        console.log('ERROR: No hay períodos disponibles para este pago!');
+        console.log('Períodos actuales:');
+        periodosConEstado.forEach(p => {
+          console.log(`  Período ${p.numero}: ${p.estado} - ${p.fechaInicio.format('DD/MM/YYYY')} a ${p.fechaFin.format('DD/MM/YYYY')}`);
+        });
+      }
+    }
+    
+    if (periodoDisponible) {
+      periodoDisponible.estado = 'CON_PAGO';
+      periodoDisponible.pago = pago;
+    }
+  });
+  
+  // Debug final para Armando
+  if (esArmando) {
+    console.log('\n=== RESULTADO FINAL ASIGNACIÓN ===');
+    periodosConEstado.forEach(p => {
+      console.log(`Período ${p.numero} (${p.fechaInicio.format('DD/MM/YYYY')} - ${p.fechaFin.format('DD/MM/YYYY')}): ${p.estado}${p.pago ? ` - Pago: ${p.pago.fecha.format('DD/MM/YYYY')} $${p.pago.monto}` : ''}`);
     });
     
-    return {
-      ...periodo,
-      estado: pagoDelPeriodo ? 'CON_PAGO' : 'SIN_PAGO',
-      pago: pagoDelPeriodo || null,
-      diasVencido: periodo.vencido ? moment().diff(periodo.fechaVencimiento, 'days') : 0
-    };
-  });
+    const periodosConPago = periodosConEstado.filter(p => p.estado === 'CON_PAGO');
+    const periodosSinPago = periodosConEstado.filter(p => p.estado === 'SIN_PAGO');
+    console.log(`\nResumen: ${periodosConPago.length} períodos con pago, ${periodosSinPago.length} sin pago`);
+    console.log('=== FIN DEBUG ASIGNACIÓN ===\n');
+  }
+  
+  return periodosConEstado;
 };
 
 // Calcular estado general del cliente
@@ -70,7 +141,13 @@ export const calcularEstadoCliente = (cliente, pagos = []) => {
   // Contar períodos sin pago
   const periodosSinPago = periodosConEstado.filter(p => p.estado === 'SIN_PAGO' && p.vencido);
   const mesesAdeudados = periodosSinPago.length;
-  const deudaTotal = mesesAdeudados * (cliente.precio || 0);
+  
+  // Usar precio personalizado si es cliente antiguo, sino precio normal
+  const precioAUsar = cliente.esClienteAntiguo && cliente.precioBase ? 
+    parseFloat(cliente.precioBase) : 
+    (cliente.precio || 0);
+  
+  const deudaTotal = mesesAdeudados * precioAUsar;
   
   // Determinar estado general
   if (mesesAdeudados === 0) {
@@ -90,7 +167,11 @@ export const calcularEstadoCliente = (cliente, pagos = []) => {
 };
 
 export const getEstadoTexto = (estadoInfo) => {
-  const { estado, mesesAdeudados, diasVencido, deudaTotal } = estadoInfo;
+  if (!estadoInfo) {
+    return 'Sin información';
+  }
+  
+  const { estado, mesesAdeudados = 0, diasVencido = 0, deudaTotal = 0 } = estadoInfo;
   
   const textos = {
     al_dia: 'Al día',

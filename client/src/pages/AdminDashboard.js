@@ -48,6 +48,8 @@ const GestionPrecios = lazy(() => import('../components/GestionPrecios'));
 const ExportarClientes = lazy(() => import('../components/ExportarClientes'));
 const AumentosGraduales = lazy(() => import('../components/AumentosGraduales'));
 const AumentosTrimestrales = lazy(() => import('../components/AumentosTrimestrales'));
+const CalculadoraAlquilerTemporal = lazy(() => import('../components/CalculadoraAlquilerTemporal'));
+const DetectorPreciosDesactualizados = lazy(() => import('../components/DetectorPreciosDesactualizados'));
 // import { limpiarClientesPrueba } from '../utils/limpiarDatosPrueba'; // Removido
 import { calcularEstadoCliente, getEstadoTexto } from '../utils/morosidad';
 import moment from 'moment';
@@ -124,19 +126,58 @@ const AdminDashboard = () => {
       
       // Cargar pagos con límites
       try {
-        // Obtener todos los pagos y filtrar localmente
-        const todosPagosRes = await pagosFirestore.obtener({ limite: 100 });
+        // Obtener todos los pagos con límite alto
+        const todosPagosRes = await pagosFirestore.obtener({ limite: 300 });
         const todosPagos = todosPagosRes.datos || todosPagosRes;
         
         // Filtrar pagos pendientes localmente
         const pagosPendientes = todosPagos.filter(pago => pago.estado === 'pendiente');
         
-        console.log('Pagos pendientes cargados:', pagosPendientes.length);
-        console.log('Todos los pagos cargados:', todosPagos.length);
-        console.log('Últimos 3 pagos:', todosPagos.slice(0, 3));
+        console.log('🔥 ADMIN DASHBOARD - Pagos pendientes cargados:', pagosPendientes.length);
+        console.log('🔥 ADMIN DASHBOARD - Todos los pagos cargados:', todosPagos.length);
+        console.log('🔥 ADMIN DASHBOARD - Últimos 3 pagos:', todosPagos.slice(0, 3));
+        
+        // Debug específico para Armando - FORZADO
+        const pagosArmando = todosPagos.filter(p => p.clienteNombre?.includes('Armando'));
+        console.log('🚨🚨🚨 DEBUG ARMANDO ADMIN DASHBOARD 🚨🚨🚨');
+        console.log('🔍 Pagos de Armando encontrados:', pagosArmando.length);
+        pagosArmando.forEach((p, i) => {
+          console.log(`🎯 Pago Armando ${i+1}: ${p.fechaRegistro} - Estado: ${p.estado} - Monto: ${p.monto}`);
+        });
+        console.log('🚨🚨🚨 FIN DEBUG ARMANDO ADMIN 🚨🚨🚨');
+        todosPagos.forEach(pago => {
+          if (pago.clienteNombre?.includes('Juan') || pago.clienteNombre?.includes('Edgardo')) {
+            console.log('PAGO ENCONTRADO:', pago.clienteNombre, 'ID:', pago.clienteId, 'Monto:', pago.monto);
+          }
+        });
+        const pagosJuan = todosPagos.filter(p => p.clienteNombre?.includes('Juan'));
+        const pagosEdgardo = todosPagos.filter(p => p.clienteNombre?.includes('Edgardo'));
+        console.log('PAGOS JUAN:', pagosJuan);
+        console.log('PAGOS EDGARDO:', pagosEdgardo);
+        console.log('Todos los pagos para debug Edgardo:', todosPagos.filter(p => p.clienteNombre?.includes('Edgardo')));
+        console.log('ID de Edgardo buscado:', clientes.find(c => c.nombre?.includes('Edgardo'))?.id);
+        
+        console.log('=== DEBUG PAGOS ===');
+        todosPagos.forEach((pago, index) => {
+          if (index < 5) { // Solo los primeros 5
+            console.log(`Pago ${index + 1}:`, {
+              clienteId: pago.clienteId,
+              clienteNombre: pago.clienteNombre,
+              monto: pago.monto,
+              estado: pago.estado
+            });
+          }
+        });
+        console.log('=== FIN DEBUG ===');
         
         setPagosPendientes(pagosPendientes);
         setTodosLosPagos(todosPagos);
+        
+        // Debug fuera del try-catch
+        setTimeout(() => {
+          console.log('PAGOS JUAN:', todosPagos.filter(p => p.clienteNombre?.includes('Juan')));
+          console.log('PAGOS EDGARDO:', todosPagos.filter(p => p.clienteNombre?.includes('Edgardo')));
+        }, 100);
       } catch (pagosError) {
         console.error('Error cargando pagos:', pagosError);
         setPagosPendientes([]);
@@ -205,6 +246,7 @@ const AdminDashboard = () => {
   };
 
   const handleVerHistorial = (cliente) => {
+    console.log('🔍 FRONTEND - Cliente para historial:', cliente.id, cliente.nombre, cliente.apellido);
     setClienteHistorial(cliente);
     setOpenHistorial(true);
   };
@@ -268,30 +310,54 @@ const AdminDashboard = () => {
   };
   
   const handlePagoDirecto = async (forzarRegistro = false) => {
-    if (!pagoDirectoData.monto || parseFloat(pagoDirectoData.monto) <= 0) {
-      setMensaje('❌ Ingrese un monto válido');
+    try {
+      console.log('🎯 FRONTEND - Iniciando handlePagoDirecto, forzarRegistro:', forzarRegistro);
+      
+      if (!pagoDirectoData.monto || parseFloat(pagoDirectoData.monto) <= 0) {
+        setMensaje('❌ Ingrese un monto válido');
+        return;
+      }
+      
+      // Verificar duplicados solo si no es un registro forzado
+      if (!forzarRegistro) {
+        console.log('🔍 FRONTEND - Verificando duplicados...');
+        const puedeRegistrar = await verificarYRegistrarPago(
+          clientePagoDirecto,
+          pagoDirectoData.monto,
+          () => handlePagoDirecto(true) // Callback para forzar registro
+        );
+        
+        console.log('🔍 FRONTEND - Puede registrar:', puedeRegistrar);
+        if (!puedeRegistrar) {
+          console.log('🛑 FRONTEND - Detenido por duplicados');
+          return; // Mostrar alerta, no continuar
+        }
+      }
+      
+      console.log('✅ FRONTEND - Pasó verificación de duplicados');
+      
+      setLoading(true);
+    } catch (outerError) {
+      console.log('💥 FRONTEND - Error en inicio de handlePagoDirecto:', outerError);
+      setMensaje('❌ Error inesperado al iniciar el pago');
       return;
     }
     
-    // Verificar duplicados solo si no es un registro forzado
-    if (!forzarRegistro) {
-      const puedeRegistrar = await verificarYRegistrarPago(
-        clientePagoDirecto,
-        pagoDirectoData.monto,
-        () => handlePagoDirecto(true) // Callback para forzar registro
-      );
-      
-      if (!puedeRegistrar) return; // Mostrar alerta, no continuar
-    }
-    
-    setLoading(true);
     try {
       console.log('💰 FRONTEND - Monto original:', pagoDirectoData.monto, 'tipo:', typeof pagoDirectoData.monto);
       console.log('💰 FRONTEND - Monto parseado:', parseFloat(pagoDirectoData.monto));
       
+      // BUGFIX: Capturar cliente actual para evitar estado stale
+      const clienteActual = clientePagoDirecto;
+      console.log('🔍 FRONTEND - Cliente actual para pago:', clienteActual?.id, clienteActual?.nombre);
+      
+      if (!clienteActual || !clienteActual.id) {
+        throw new Error('No hay cliente seleccionado para el pago');
+      }
+      
       const pagoData = {
-        clienteId: clientePagoDirecto.id,
-        clienteNombre: `${clientePagoDirecto.nombre} ${clientePagoDirecto.apellido}`,
+        clienteId: clienteActual.id,
+        clienteNombre: `${clienteActual.nombre} ${clienteActual.apellido}`,
         monto: parseFloat(pagoDirectoData.monto),
         tipoPago: pagoDirectoData.tipoPago,
         observaciones: pagoDirectoData.observaciones || 'Pago directo - Admin',
@@ -308,52 +374,74 @@ const AdminDashboard = () => {
         ? 'https://sistema-cocheras-backend.onrender.com/api'
         : 'http://localhost:3000/api';
       
+      console.log('🌐 FRONTEND - API URL:', apiUrl);
+      
       const { getAuth } = await import('firebase/auth');
       const auth = getAuth();
       const user = auth.currentUser;
-      const token = await user.getIdToken();
+      console.log('🔥 FRONTEND - User autenticado:', !!user);
       
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 segundos timeout
-      
-      const response = await fetch(`${apiUrl}/pagos`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(pagoData),
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        throw new Error(`Error del servidor: ${response.status}`);
+      if (!user) {
+        throw new Error('No hay usuario autenticado');
       }
       
-      await response.json();
+      const token = await user.getIdToken();
+      console.log('🔑 FRONTEND - Token obtenido, iniciando fetch...');
       
-      setMensaje('✅ Pago directo registrado y aprobado exitosamente');
-      setOpenPagoDirecto(false);
-      setClientePagoDirecto(null);
-      setPagoDirectoData({ 
-        monto: '', 
-        tipoPago: 'efectivo', 
-        observaciones: '',
-        fechaPago: new Date().toISOString().split('T')[0]
-      });
-      setAlertaDuplicados({ open: false, cliente: null, monto: '', duplicados: {}, onConfirm: null });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
       
-      // Recargar datos inmediatamente
-      await cargarDatos();
+      try {
+        const response = await fetch(`${apiUrl}/pagos`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(pagoData),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        console.log('🌐 FRONTEND - Response status:', response.status);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.log('❌ FRONTEND - Error response:', errorText);
+          throw new Error(`Error del servidor: ${response.status} - ${errorText}`);
+        }
+        
+        const result = await response.json();
+        console.log('✅ FRONTEND - Response data:', result);
+        
+        setMensaje('✅ Pago directo registrado y aprobado exitosamente');
+        setOpenPagoDirecto(false);
+        setClientePagoDirecto(null);
+        setPagoDirectoData({ 
+          monto: '', 
+          tipoPago: 'efectivo', 
+          observaciones: '',
+          fechaPago: new Date().toISOString().split('T')[0]
+        });
+        setAlertaDuplicados({ open: false, cliente: null, monto: '', duplicados: {}, onConfirm: null });
+        
+        // Recargar datos
+        await cargarDatos();
+        
+
+        
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        console.log('💥 FRONTEND - Fetch error:', fetchError);
+        throw fetchError;
+      }
       
     } catch (error) {
       console.error('Error registrando pago directo:', error);
       if (error.name === 'AbortError') {
-        setMensaje('❌ Timeout: El servidor tardó demasiado en responder');
+        setMensaje('⏱️ El servidor está iniciando (Render se duerme por inactividad). Espere 30 segundos e intente nuevamente.');
       } else {
-        setMensaje('❌ Error registrando pago directo');
+        setMensaje('❌ Error registrando pago directo: ' + error.message);
       }
     } finally {
       setLoading(false);
@@ -526,6 +614,8 @@ const AdminDashboard = () => {
           <Tab label="Gestión de Precios" />
           <Tab label="Aumentos Graduales" />
           <Tab label="Aumentos Trimestrales" />
+          <Tab label="Calculadora Temporal" />
+          <Tab label="Precios Desactualizados" />
           <Tab label="Reportes Avanzados" />
           <Tab label="Reportes Básicos" />
         </Tabs>
@@ -646,6 +736,19 @@ const AdminDashboard = () => {
                 >
                   Recargar
                 </Button>
+                <Button 
+                  variant="outlined"
+                  color="info"
+                  onClick={() => {
+                    console.log('=== TODOS LOS CLIENTES ===');
+                    clientes.forEach(c => {
+                      console.log(`${c.nombre} ${c.apellido}: ${c.id}`);
+                    });
+                    console.log('=== FIN CLIENTES ===');
+                  }}
+                >
+                  Debug IDs
+                </Button>
                 <Button
                   variant="outlined"
                   color="warning"
@@ -706,6 +809,7 @@ const AdminDashboard = () => {
                 >
                   {loading ? 'Limpiando...' : '🗑️ Limpiar Historial'}
                 </Button>
+
               </Box>
               
               {/* Filtros y búsqueda */}
@@ -849,7 +953,12 @@ const AdminDashboard = () => {
                         <Button 
                           size="small" 
                           startIcon={<Edit />}
-                          onClick={() => handleEditarCliente(cliente)}
+                          onClick={() => {
+                            if (cliente.nombre?.includes('Juan')) {
+                              console.log('🆔 ID DE JUAN JOSÉ:', cliente.id);
+                            }
+                            handleEditarCliente(cliente);
+                          }}
                           sx={{ mr: 1 }}
                         >
                           Editar
@@ -858,6 +967,7 @@ const AdminDashboard = () => {
                           size="small" 
                           startIcon={<Payment />}
                           onClick={() => {
+                            console.log('🔍 FRONTEND - Cliente para pago directo:', cliente.id, cliente.nombre, cliente.apellido);
                             setClientePagoDirecto(cliente);
                             setPagoDirectoData({ 
                               monto: '', 
@@ -910,6 +1020,48 @@ const AdminDashboard = () => {
                             Ver Períodos
                           </Button>
                         )}
+                        {cliente.mesesAdelantados && (
+                          <Button 
+                            size="small" 
+                            startIcon={<Delete />}
+                            onClick={async () => {
+                              if (window.confirm(`¿Eliminar el adelanto de ${cliente.mesesAdelantados} meses de ${cliente.nombre} ${cliente.apellido}?`)) {
+                                try {
+                                  const { getAuth } = await import('firebase/auth');
+                                  const auth = getAuth();
+                                  const user = auth.currentUser;
+                                  const token = await user.getIdToken();
+                                  
+                                  const apiUrl = window.location.hostname.includes('netlify.app') 
+                                    ? 'https://sistema-cocheras-backend.onrender.com/api'
+                                    : 'http://localhost:3000/api';
+                                  
+                                  const response = await fetch(`${apiUrl}/clientes/${cliente.id}/adelanto`, {
+                                    method: 'DELETE',
+                                    headers: {
+                                      'Authorization': `Bearer ${token}`
+                                    }
+                                  });
+                                  
+                                  if (response.ok) {
+                                    setMensaje('✅ Adelanto eliminado exitosamente');
+                                    await cargarDatos();
+                                  } else {
+                                    setMensaje('❌ Error eliminando adelanto');
+                                  }
+                                } catch (error) {
+                                  console.error('Error:', error);
+                                  setMensaje('❌ Error de conexión');
+                                }
+                              }
+                            }}
+                            variant="outlined"
+                            color="warning"
+                            sx={{ mr: 1 }}
+                          >
+                            Eliminar Adelanto
+                          </Button>
+                        )}
                         <Button 
                           size="small" 
                           startIcon={<Delete />}
@@ -954,10 +1106,18 @@ const AdminDashboard = () => {
       </TabPanel>
 
       <TabPanel value={tabValue} index={8}>
-        <ReportesAvanzados />
+        <CalculadoraAlquilerTemporal />
       </TabPanel>
 
       <TabPanel value={tabValue} index={9}>
+        <DetectorPreciosDesactualizados />
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={10}>
+        <ReportesAvanzados />
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={11}>
         <Card>
           <CardContent>
             <Typography variant="h6" gutterBottom>
@@ -1495,6 +1655,7 @@ const AdminDashboard = () => {
                 value={pagoDirectoData.monto}
                 onChange={(e) => {
                   const valor = e.target.value.replace(/[^0-9]/g, ''); // Solo números
+                  console.log('💰 FRONTEND - Monto cambiado a:', valor);
                   setPagoDirectoData({...pagoDirectoData, monto: valor});
                 }}
                 placeholder={clientePagoDirecto.precio?.toString()}
@@ -1530,7 +1691,13 @@ const AdminDashboard = () => {
           <Button
             variant="contained"
             color="success"
-            onClick={handlePagoDirecto}
+            onClick={() => {
+              console.log('🔘 FRONTEND - Botón clickeado');
+              console.log('🔘 FRONTEND - pagoDirectoData.monto:', pagoDirectoData.monto);
+              console.log('🔘 FRONTEND - loading:', loading);
+              console.log('🔘 FRONTEND - disabled:', !pagoDirectoData.monto || loading);
+              handlePagoDirecto();
+            }}
             disabled={!pagoDirectoData.monto || loading}
             startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <Payment />}
             size="large"
