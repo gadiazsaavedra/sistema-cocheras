@@ -476,9 +476,9 @@ const AdminDashboard = () => {
       }
       
       // Para otros ordenamientos, mantener prioridad de morosos primero
-      const prioridadEstado = { moroso: 0, vencido: 1, por_vencer: 2, al_dia: 3, sin_fecha: 4 };
-      const prioridadA = prioridadEstado[a.estadoMorosidad.estado] || 5;
-      const prioridadB = prioridadEstado[b.estadoMorosidad.estado] || 5;
+      const prioridadEstado = { critico: 0, moroso: 1, vencido: 2, advertencia: 3, al_dia: 4, sin_fecha: 5 };
+      const prioridadA = prioridadEstado[a.estadoMorosidad.estado] || 6;
+      const prioridadB = prioridadEstado[b.estadoMorosidad.estado] || 6;
       
       if (prioridadA !== prioridadB) {
         return prioridadA - prioridadB;
@@ -850,20 +850,24 @@ const AdminDashboard = () => {
                     {clientesFiltrados.length} de {clientes.length} clientes
                   </Typography>
                   {(() => {
+                    const criticos = clientesFiltrados.filter(c => c.estadoMorosidad.estado === 'critico').length;
                     const morosos = clientesFiltrados.filter(c => c.estadoMorosidad.estado === 'moroso').length;
                     const vencidos = clientesFiltrados.filter(c => c.estadoMorosidad.estado === 'vencido').length;
-                    const porVencer = clientesFiltrados.filter(c => c.estadoMorosidad.estado === 'por_vencer').length;
+                    const advertencias = clientesFiltrados.filter(c => c.estadoMorosidad.estado === 'advertencia').length;
                     
                     return (
                       <Box sx={{ display: 'flex', gap: 1 }}>
+                        {criticos > 0 && (
+                          <Chip label={`${criticos} Críticos`} sx={{ bgcolor: '#8B0000', color: 'white' }} size="small" />
+                        )}
                         {morosos > 0 && (
                           <Chip label={`${morosos} Morosos`} color="error" size="small" />
                         )}
                         {vencidos > 0 && (
                           <Chip label={`${vencidos} Vencidos`} color="warning" size="small" />
                         )}
-                        {porVencer > 0 && (
-                          <Chip label={`${porVencer} Por vencer`} color="warning" size="small" variant="outlined" />
+                        {advertencias > 0 && (
+                          <Chip label={`${advertencias} Advertencias`} color="warning" size="small" variant="outlined" />
                         )}
                       </Box>
                     );
@@ -892,15 +896,17 @@ const AdminDashboard = () => {
                       key={cliente.id}
                       sx={{
                         backgroundColor: 
+                          cliente.estadoMorosidad.estado === 'critico' ? 'rgba(139, 0, 0, 0.15)' :
                           cliente.estadoMorosidad.estado === 'moroso' ? 'rgba(244, 67, 54, 0.1)' :
                           cliente.estadoMorosidad.estado === 'vencido' ? 'rgba(255, 152, 0, 0.1)' :
-                          cliente.estadoMorosidad.estado === 'por_vencer' ? 'rgba(255, 193, 7, 0.1)' :
+                          cliente.estadoMorosidad.estado === 'advertencia' ? 'rgba(255, 193, 7, 0.1)' :
                           'inherit',
                         '&:hover': {
                           backgroundColor: 
+                            cliente.estadoMorosidad.estado === 'critico' ? 'rgba(139, 0, 0, 0.25)' :
                             cliente.estadoMorosidad.estado === 'moroso' ? 'rgba(244, 67, 54, 0.2)' :
                             cliente.estadoMorosidad.estado === 'vencido' ? 'rgba(255, 152, 0, 0.2)' :
-                            cliente.estadoMorosidad.estado === 'por_vencer' ? 'rgba(255, 193, 7, 0.2)' :
+                            cliente.estadoMorosidad.estado === 'advertencia' ? 'rgba(255, 193, 7, 0.2)' :
                             'rgba(0, 0, 0, 0.04)'
                         }
                       }}
@@ -929,7 +935,7 @@ const AdminDashboard = () => {
                             size="small"
                             sx={{
                               fontWeight: 'bold',
-                              ...(cliente.estadoMorosidad.estado === 'moroso' && {
+                              ...((cliente.estadoMorosidad.estado === 'moroso' || cliente.estadoMorosidad.estado === 'critico') && {
                                 animation: 'pulse 2s infinite',
                                 '@keyframes pulse': {
                                   '0%': { opacity: 1 },

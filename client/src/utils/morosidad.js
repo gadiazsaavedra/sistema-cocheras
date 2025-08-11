@@ -138,7 +138,7 @@ export const calcularEstadoCliente = (cliente, pagos = []) => {
   const periodos = calcularPeriodosMensuales(cliente.fechaIngreso, diasVencimiento);
   const periodosConEstado = calcularEstadoPeriodos(periodos, pagos.filter(p => p.clienteId === cliente.id));
   
-  // Contar períodos sin pago
+  // Contar períodos sin pago que ya vencieron
   const periodosSinPago = periodosConEstado.filter(p => p.estado === 'SIN_PAGO' && p.vencido);
   const mesesAdeudados = periodosSinPago.length;
   
@@ -149,20 +149,26 @@ export const calcularEstadoCliente = (cliente, pagos = []) => {
   
   const deudaTotal = mesesAdeudados * precioAUsar;
   
-  // Determinar estado general
+  // Si no hay períodos vencidos sin pago, está al día
   if (mesesAdeudados === 0) {
     return { estado: 'al_dia', diasVencido: 0, color: 'success', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
   }
   
-  const ultimoPeriodoVencido = periodosSinPago[periodosSinPago.length - 1];
-  const diasVencido = ultimoPeriodoVencido ? ultimoPeriodoVencido.diasVencido : 0;
+  // Encontrar el período más antiguo sin pago (el primero en la lista)
+  const primerPeriodoSinPago = periodosSinPago[0];
+  const diasAtraso = primerPeriodoSinPago ? primerPeriodoSinPago.diasVencido : 0;
   
-  if (mesesAdeudados === 1 && diasVencido <= 5) {
-    return { estado: 'por_vencer', diasVencido, color: 'warning', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
-  } else if (mesesAdeudados <= 2) {
-    return { estado: 'vencido', diasVencido, color: 'error', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
+  // Nuevo criterio basado en días de atraso
+  if (diasAtraso <= 5) {
+    return { estado: 'al_dia', diasVencido: diasAtraso, color: 'success', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
+  } else if (diasAtraso <= 15) {
+    return { estado: 'advertencia', diasVencido: diasAtraso, color: 'warning', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
+  } else if (diasAtraso <= 30) {
+    return { estado: 'vencido', diasVencido: diasAtraso, color: 'error', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
+  } else if (diasAtraso <= 60) {
+    return { estado: 'moroso', diasVencido: diasAtraso, color: 'error', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
   } else {
-    return { estado: 'moroso', diasVencido, color: 'error', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
+    return { estado: 'critico', diasVencido: diasAtraso, color: 'error', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
   }
 };
 
@@ -174,10 +180,11 @@ export const getEstadoTexto = (estadoInfo) => {
   const { estado, mesesAdeudados = 0, diasVencido = 0, deudaTotal = 0 } = estadoInfo;
   
   const textos = {
-    al_dia: 'Al día',
-    por_vencer: `Por vencer (${diasVencido} días)`,
-    vencido: `${mesesAdeudados} mes${mesesAdeudados > 1 ? 'es' : ''} adeudado${mesesAdeudados > 1 ? 's' : ''} - $${deudaTotal.toLocaleString()}`,
-    moroso: `MOROSO: ${mesesAdeudados} meses - $${deudaTotal.toLocaleString()}`,
+    al_dia: diasVencido > 0 ? `Al día (${diasVencido} días)` : 'Al día',
+    advertencia: `Advertencia: ${diasVencido} días de atraso - $${deudaTotal.toLocaleString()}`,
+    vencido: `Vencido: ${diasVencido} días de atraso - $${deudaTotal.toLocaleString()}`,
+    moroso: `MOROSO: ${diasVencido} días de atraso - $${deudaTotal.toLocaleString()}`,
+    critico: `CRÍTICO: ${diasVencido} días de atraso - $${deudaTotal.toLocaleString()}`,
     sin_fecha: 'Sin fecha de ingreso'
   };
   
