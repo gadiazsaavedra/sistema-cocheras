@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "build": "cd client && npm install && npm run build",
     "backup": "node backup-system.js backup",
     "backup-restore": "node backup-system.js restore",
     "backup-list": "node backup-system.js list",
