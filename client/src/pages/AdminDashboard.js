@@ -958,7 +958,13 @@ const AdminDashboard = () => {
                           'Sin asignar'
                         }
                       </TableCell>
-                      <TableCell>${Math.round(cliente.precio || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} / {cliente.diasVencimiento || 30}d</TableCell>
+                      <TableCell>
+                        ${Math.round(
+                          (cliente.esClienteAntiguo && cliente.precioBase) ? 
+                            parseFloat(cliente.precioBase) : 
+                            (cliente.precio || 0)
+                        ).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} / {cliente.diasVencimiento || 30}d
+                      </TableCell>
                       <TableCell>
                         {cliente.fechaProximoVencimiento ? 
                           moment(cliente.fechaProximoVencimiento).format('DD/MM/YYYY') : 
