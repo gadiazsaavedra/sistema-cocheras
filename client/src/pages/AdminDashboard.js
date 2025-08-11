@@ -438,8 +438,46 @@ const AdminDashboard = () => {
       
     } catch (error) {
       console.error('Error registrando pago directo:', error);
-      if (error.name === 'AbortError') {
-        setMensaje('⏱️ El servidor está iniciando (Render se duerme por inactividad). Espere 30 segundos e intente nuevamente.');
+      
+      // Fallback: Usar Firebase directamente si el backend falla
+      if (error.message.includes('Failed to fetch') || error.name === 'AbortError') {
+        console.log('🔄 FRONTEND - Backend no disponible, usando Firebase directamente...');
+        try {
+          const pagoFirebase = {
+            clienteId: clienteActual.id,
+            clienteNombre: `${clienteActual.nombre} ${clienteActual.apellido}`,
+            monto: parseFloat(pagoDirectoData.monto),
+            tipoPago: pagoDirectoData.tipoPago,
+            observaciones: pagoDirectoData.observaciones || 'Pago directo - Admin',
+            ubicacion: { lat: 0, lng: 0, admin: true },
+            fotoBase64: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+            empleadoNombre: 'ADMIN - Pago Directo',
+            fechaRegistro: new Date(pagoDirectoData.fechaPago).toISOString()
+          };
+          
+          // Crear pago en Firebase
+          const pagoCreado = await pagosFirestore.crear(pagoFirebase);
+          
+          // Confirmar automáticamente
+          await pagosFirestore.confirmar(pagoCreado.id, 'aprobar');
+          
+          setMensaje('✅ Pago directo registrado exitosamente (Firebase)');
+          setOpenPagoDirecto(false);
+          setClientePagoDirecto(null);
+          setPagoDirectoData({ 
+            monto: '', 
+            tipoPago: 'efectivo', 
+            observaciones: '',
+            fechaPago: new Date().toISOString().split('T')[0]
+          });
+          setAlertaDuplicados({ open: false, cliente: null, monto: '', duplicados: {}, onConfirm: null });
+          
+          await cargarDatos();
+          
+        } catch (firebaseError) {
+          console.error('Error con Firebase:', firebaseError);
+          setMensaje('❌ Error: Backend no disponible y Firebase falló');
+        }
       } else {
         setMensaje('❌ Error registrando pago directo: ' + error.message);
       }
