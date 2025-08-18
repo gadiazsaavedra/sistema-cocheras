@@ -484,7 +484,9 @@ const EmpleadoDashboard = () => {
             estadoMorosidad: calcularEstadoCliente(cliente, todosLosPagos)
           }));
           const clientesMorosos = clientesConEstado.filter(c => 
-            c.estadoMorosidad.estado === 'moroso' || c.estadoMorosidad.estado === 'vencido'
+            c.estadoMorosidad.estado === 'moroso' || 
+            c.estadoMorosidad.estado === 'vencido' ||
+            c.estadoMorosidad.estado === 'critico'
           );
           
           if (clientesMorosos.length === 0) return null;
@@ -648,10 +650,10 @@ const EmpleadoDashboard = () => {
                         estadoMorosidad: calcularEstadoCliente(cliente, todosLosPagos)
                       }))
                       .sort((a, b) => {
-                        // Ordenar por prioridad de morosidad: morosos primero
-                        const prioridadEstado = { moroso: 0, vencido: 1, por_vencer: 2, al_dia: 3, sin_fecha: 4 };
-                        const prioridadA = prioridadEstado[a.estadoMorosidad.estado] || 5;
-                        const prioridadB = prioridadEstado[b.estadoMorosidad.estado] || 5;
+                        // Ordenar por prioridad de morosidad: morosos primero (igual que Admin)
+                        const prioridadEstado = { critico: 0, moroso: 1, vencido: 2, advertencia: 3, al_dia: 4, sin_fecha: 5 };
+                        const prioridadA = prioridadEstado[a.estadoMorosidad.estado] || 6;
+                        const prioridadB = prioridadEstado[b.estadoMorosidad.estado] || 6;
                         
                         if (prioridadA !== prioridadB) {
                           return prioridadA - prioridadB;
@@ -661,7 +663,9 @@ const EmpleadoDashboard = () => {
                         return `${a.nombre} ${a.apellido}`.localeCompare(`${b.nombre} ${b.apellido}`);
                       })
                       .map((cliente) => {
-                      const esMoroso = cliente.estadoMorosidad.estado === 'moroso' || cliente.estadoMorosidad.estado === 'vencido';
+                      const esMoroso = cliente.estadoMorosidad.estado === 'moroso' || 
+                                       cliente.estadoMorosidad.estado === 'vencido' ||
+                                       cliente.estadoMorosidad.estado === 'critico';
                       
                       return (
                         <ClienteItem

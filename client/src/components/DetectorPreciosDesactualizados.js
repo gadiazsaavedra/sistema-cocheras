@@ -48,13 +48,39 @@ const DetectorPreciosDesactualizados = () => {
         .map(cliente => {
           const precioConfigurado = preciosData[cliente.tipoVehiculo]?.[cliente.modalidadTiempo]?.[cliente.modalidadTecho] || 0;
           
-          // Obtener último pago confirmado del cliente
+          // Obtener pagos confirmados del cliente ordenados por fecha
           const pagosCliente = pagos
             .filter(pago => pago.clienteId === cliente.id && pago.estado === 'confirmado')
             .sort((a, b) => new Date(b.fechaRegistro) - new Date(a.fechaRegistro));
           
           const ultimoPago = pagosCliente[0];
           const ultimoMontoPagado = ultimoPago ? ultimoPago.monto : 0;
+          
+          // Verificar si lleva 3+ meses pagando el mismo precio
+          const hace3Meses = new Date();
+          hace3Meses.setMonth(hace3Meses.getMonth() - 3);
+          
+          const pagosUltimos3Meses = pagosCliente.filter(pago => 
+            new Date(pago.fechaRegistro) >= hace3Meses
+          );
+          
+          const mismoPrecioPor3Meses = pagosUltimos3Meses.length >= 3 && 
+            pagosUltimos3Meses.every(pago => pago.monto === ultimoMontoPagado);
+          
+          // Debug específico para Rosa Germano
+          if (cliente.nombre?.toLowerCase().includes('rosa') || cliente.apellido?.toLowerCase().includes('germano')) {
+            console.log('🌹 DEBUG ROSA GERMANO:');
+            console.log('  - Total pagos cliente:', pagosCliente.length);
+            console.log('  - Pagos últimos 3 meses:', pagosUltimos3Meses.length);
+            console.log('  - Último monto pagado:', ultimoMontoPagado);
+            console.log('  - Fecha hace 3 meses:', hace3Meses.toISOString());
+            console.log('  - Mismo precio por 3 meses:', mismoPrecioPor3Meses);
+            console.log('  - Pagos últimos 3 meses:', pagosUltimos3Meses.map(p => ({
+              fecha: p.fechaRegistro,
+              monto: p.monto,
+              estado: p.estado
+            })));
+          }
           
           const diferencia = precioConfigurado - ultimoMontoPagado;
           
@@ -65,11 +91,29 @@ const DetectorPreciosDesactualizados = () => {
             ultimaFechaPago: ultimoPago ? ultimoPago.fechaRegistro : null,
             diferencia,
             porcentajeDiferencia: precioConfigurado > 0 ? ((diferencia / precioConfigurado) * 100) : 0,
-            necesitaAjuste: diferencia > 0
+            necesitaAjuste: diferencia > 0,
+            mismoPrecioPor3Meses,
+            cantidadPagosUltimos3Meses: pagosUltimos3Meses.length,
+            alertaPrecioEstancado: mismoPrecioPor3Meses && diferencia >= 0 // Cambiar > 0 a >= 0 para incluir casos sin diferencia de precio configurado
           };
         })
-        .filter(cliente => cliente.necesitaAjuste)
-        .sort((a, b) => b.diferencia - a.diferencia);
+        .filter(cliente => {
+          // Debug para Rosa
+          if (cliente.nombre?.toLowerCase().includes('rosa') || cliente.apellido?.toLowerCase().includes('germano')) {
+            console.log('🌹 FILTRO ROSA:', {
+              necesitaAjuste: cliente.necesitaAjuste,
+              alertaPrecioEstancado: cliente.alertaPrecioEstancado,
+              pasaFiltro: cliente.necesitaAjuste || cliente.alertaPrecioEstancado
+            });
+          }
+          return cliente.necesitaAjuste || cliente.alertaPrecioEstancado;
+        })
+        .sort((a, b) => {
+          // Priorizar alertas de precio estancado
+          if (a.alertaPrecioEstancado && !b.alertaPrecioEstancado) return -1;
+          if (!a.alertaPrecioEstancado && b.alertaPrecioEstancado) return 1;
+          return b.diferencia - a.diferencia;
+        });
 
       setClientesDesactualizados(desactualizados);
     } catch (error) {
@@ -118,6 +162,17 @@ const DetectorPreciosDesactualizados = () => {
             <Card sx={{ flex: 1 }}>
               <CardContent>
                 <Typography variant="h4" color="warning.main">
+                  {clientesDesactualizados.filter(c => c.alertaPrecioEstancado).length}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  ⚠️ Precio estancado 3+ meses
+                </Typography>
+              </CardContent>
+            </Card>
+            
+            <Card sx={{ flex: 1 }}>
+              <CardContent>
+                <Typography variant="h4" color="warning.main">
                   ${getTotalPerdida().toLocaleString()}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -155,7 +210,7 @@ const DetectorPreciosDesactualizados = () => {
                           <TableCell>Último Pago</TableCell>
                           <TableCell>Precio Configurado</TableCell>
                           <TableCell>Diferencia</TableCell>
-                          <TableCell>% Diferencia</TableCell>
+                          <TableCell>Estado</TableCell>
                           <TableCell>Empleado</TableCell>
                         </TableRow>
                       </TableHead>
@@ -196,11 +251,28 @@ const DetectorPreciosDesactualizados = () => {
                               </Typography>
                             </TableCell>
                             <TableCell>
-                              <Chip 
-                                label={`${cliente.porcentajeDiferencia.toFixed(1)}%`}
-                                color={getSeveridad(cliente.porcentajeDiferencia)}
-                                size="small"
-                              />
+                              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                <Chip 
+                                  label={`${cliente.porcentajeDiferencia.toFixed(1)}%`}
+                                  color={getSeveridad(cliente.porcentajeDiferencia)}
+                                  size="small"
+                                />
+                                {cliente.alertaPrecioEstancado && (
+                                  <Chip 
+                                    label="🚨 3+ meses mismo precio"
+                                    color="error"
+                                    size="small"
+                                    sx={{ 
+                                      animation: 'pulse 2s infinite',
+                                      '@keyframes pulse': {
+                                        '0%': { opacity: 1 },
+                                        '50%': { opacity: 0.7 },
+                                        '100%': { opacity: 1 }
+                                      }
+                                    }}
+                                  />
+                                )}
+                              </Box>
                             </TableCell>
                             <TableCell>
                               <Typography variant="body2">

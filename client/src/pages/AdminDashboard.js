@@ -93,6 +93,7 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [filtroOrden, setFiltroOrden] = useState('nombre');
   const [busquedaCliente, setBusquedaCliente] = useState('');
+  const [filtroModalidad, setFiltroModalidad] = useState('todas'); // Nuevo filtro para modalidad
   
   // Callback estable para evitar re-renders del TextField
   const handleBusquedaChange = useCallback((e) => {
@@ -121,13 +122,13 @@ const AdminDashboard = () => {
   const cargarDatos = useCallback(async () => {
     try {
       // Cargar clientes con paginación
-      const clientesRes = await clientesFirestore.obtener({ limite: 200 });
+      const clientesRes = await clientesFirestore.obtener({ limite: 100 });
       setClientes(clientesRes.datos || clientesRes); // Compatibilidad
       
       // Cargar pagos con límites
       try {
-        // Obtener todos los pagos con límite alto
-        const todosPagosRes = await pagosFirestore.obtener({ limite: 300 });
+        // Obtener todos los pagos con límite optimizado
+        const todosPagosRes = await pagosFirestore.obtener({ limite: 150 });
         const todosPagos = todosPagosRes.datos || todosPagosRes;
         
         // Filtrar pagos pendientes localmente
@@ -440,7 +441,10 @@ const AdminDashboard = () => {
       console.error('Error registrando pago directo:', error);
       
       // Fallback: Usar Firebase directamente si el backend falla
-      if (error.message.includes('Failed to fetch') || error.name === 'AbortError') {
+      if (error.message.includes('Failed to fetch') || 
+          error.name === 'AbortError' || 
+          error.message.includes('Quota exceeded') ||
+          error.message.includes('RESOURCE_EXHAUSTED')) {
         console.log('🔄 FRONTEND - Backend no disponible, usando Firebase directamente...');
         try {
           const pagoFirebase = {
@@ -461,7 +465,7 @@ const AdminDashboard = () => {
           // Confirmar automáticamente
           await pagosFirestore.confirmar(pagoCreado.id, 'aprobar');
           
-          setMensaje('✅ Pago directo registrado exitosamente (Firebase)');
+          setMensaje('✅ Pago registrado exitosamente (Modo offline - Firebase directo)');
           setOpenPagoDirecto(false);
           setClientePagoDirecto(null);
           setPagoDirectoData({ 
@@ -476,7 +480,11 @@ const AdminDashboard = () => {
           
         } catch (firebaseError) {
           console.error('Error con Firebase:', firebaseError);
-          setMensaje('❌ Error: Backend no disponible y Firebase falló');
+          if (firebaseError.message?.includes('Quota exceeded')) {
+            setMensaje('⚠️ Cuota de Firebase agotada. Intente mañana o contacte al administrador.');
+          } else {
+            setMensaje('❌ Error: Backend no disponible y Firebase falló');
+          }
         }
       } else {
         setMensaje('❌ Error registrando pago directo: ' + error.message);
@@ -500,11 +508,45 @@ const AdminDashboard = () => {
       );
     }
     
+    // Aplicar filtro de modalidad
+    if (filtroModalidad !== 'todas') {
+      clientesFiltrados = clientesFiltrados.filter(cliente => 
+        cliente.modalidadTiempo === filtroModalidad
+      );
+    }
+    
     // Calcular estado de morosidad para cada cliente
-    clientesFiltrados = clientesFiltrados.map(cliente => ({
-      ...cliente,
-      estadoMorosidad: calcularEstadoCliente(cliente, todosLosPagos)
-    }));
+    clientesFiltrados = clientesFiltrados.map(cliente => {
+      try {
+        const estadoMorosidad = calcularEstadoCliente(cliente, todosLosPagos);
+        
+        // Debug específico para Safari - SOLO primeros 3 clientes
+        if (clientesFiltrados.length < 3) {
+          console.log(`🔍 SAFARI DEBUG - Cliente: ${cliente.nombre} ${cliente.apellido}`);
+          console.log('  - fechaIngreso:', cliente.fechaIngreso);
+          console.log('  - estadoMorosidad:', estadoMorosidad);
+          console.log('  - pagos del cliente:', todosLosPagos.filter(p => p.clienteId === cliente.id).length);
+          
+          // Verificar si debería estar moroso
+          if (cliente.fechaIngreso) {
+            const diasDesdeIngreso = Math.floor((new Date() - new Date(cliente.fechaIngreso)) / (1000 * 60 * 60 * 24));
+            console.log('  - días desde ingreso:', diasDesdeIngreso);
+            console.log('  - días vencimiento:', cliente.diasVencimiento || 30);
+          }
+        }
+        
+        return {
+          ...cliente,
+          estadoMorosidad: estadoMorosidad || { estado: 'sin_fecha', diasVencido: 0, color: 'warning', mesesAdeudados: 0, deudaTotal: 0 }
+        };
+      } catch (error) {
+        console.error(`❌ Error calculando estado para ${cliente.nombre}:`, error);
+        return {
+          ...cliente,
+          estadoMorosidad: { estado: 'sin_fecha', diasVencido: 0, color: 'warning', mesesAdeudados: 0, deudaTotal: 0 }
+        };
+      }
+    });
     
     // Aplicar ordenamiento
     clientesFiltrados.sort((a, b) => {
@@ -542,7 +584,19 @@ const AdminDashboard = () => {
     });
     
     return clientesFiltrados;
-  }, [clientes, busquedaCliente, filtroOrden, todosLosPagos]);
+  }, [clientes, busquedaCliente, filtroOrden, filtroModalidad, todosLosPagos]);
+  
+  // Debug adicional - mostrar resumen de estados
+  React.useEffect(() => {
+    if (clientesFiltrados.length > 0) {
+      const resumenEstados = clientesFiltrados.reduce((acc, cliente) => {
+        const estado = cliente.estadoMorosidad?.estado || 'undefined';
+        acc[estado] = (acc[estado] || 0) + 1;
+        return acc;
+      }, {});
+      console.log('📊 RESUMEN ESTADOS:', resumenEstados);
+    }
+  }, [clientesFiltrados]);
 
   const imprimirReporte = () => {
     const printContent = `
@@ -774,6 +828,40 @@ const AdminDashboard = () => {
                 >
                   Recargar
                 </Button>
+                <Button
+                  variant="outlined"
+                  color="warning"
+                  onClick={async () => {
+                    const clientesSinFecha = clientes.filter(c => !c.fechaIngreso);
+                    if (clientesSinFecha.length === 0) {
+                      setMensaje('✅ Todos los clientes tienen fecha de ingreso');
+                      return;
+                    }
+                    
+                    if (window.confirm(`📅 ¿Arreglar ${clientesSinFecha.length} clientes sin fecha de ingreso?\n\nSe asignará la fecha de hoy como fecha de ingreso.`)) {
+                      try {
+                        setLoading(true);
+                        const hoy = new Date().toISOString().split('T')[0];
+                        
+                        for (const cliente of clientesSinFecha) {
+                          await clientesFirestore.actualizar(cliente.id, {
+                            fechaIngreso: hoy,
+                            fechaProximoVencimiento: new Date(Date.now() + (cliente.diasVencimiento || 30) * 24 * 60 * 60 * 1000).toISOString()
+                          });
+                        }
+                        
+                        setMensaje(`✅ ${clientesSinFecha.length} clientes actualizados con fecha de ingreso`);
+                        await cargarDatos();
+                      } catch (error) {
+                        setMensaje('❌ Error actualizando clientes');
+                      }
+                      setLoading(false);
+                    }
+                  }}
+                  disabled={loading}
+                >
+                  {loading ? 'Arreglando...' : '📅 Arreglar Fechas'}
+                </Button>
                 <Button 
                   variant="outlined"
                   color="info"
@@ -883,9 +971,30 @@ const AdminDashboard = () => {
                   </Select>
                 </FormControl>
                 
+                <FormControl size="small" sx={{ minWidth: 150 }}>
+                  <InputLabel>Modalidad</InputLabel>
+                  <Select
+                    value={filtroModalidad}
+                    onChange={(e) => setFiltroModalidad(e.target.value)}
+                    label="Modalidad"
+                  >
+                    <MenuItem value="todas">🕐 Todas</MenuItem>
+                    <MenuItem value="diurna">☀️ Diurna (8-17hs)</MenuItem>
+                    <MenuItem value="nocturna">🌙 Nocturna (17-8hs)</MenuItem>
+                    <MenuItem value="24hs">⏰ 24 Horas</MenuItem>
+                  </Select>
+                </FormControl>
+                
                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                   <Typography variant="body2" color="text.secondary">
                     {clientesFiltrados.length} de {clientes.length} clientes
+                    {filtroModalidad !== 'todas' && (
+                      <span style={{ color: '#1976d2', fontWeight: 'bold' }}>
+                        {' '}({filtroModalidad === 'nocturna' ? '🌙 Nocturnos' : 
+                           filtroModalidad === 'diurna' ? '☀️ Diurnos' : 
+                           '⏰ 24hs'})
+                      </span>
+                    )}
                   </Typography>
                   {(() => {
                     const criticos = clientesFiltrados.filter(c => c.estadoMorosidad.estado === 'critico').length;
@@ -921,6 +1030,7 @@ const AdminDashboard = () => {
                     <TableCell>Nombre Completo</TableCell>
                     <TableCell>Teléfono</TableCell>
                     <TableCell>Vehículo</TableCell>
+                    <TableCell>Modalidad</TableCell>
                     <TableCell>Empleado</TableCell>
                     <TableCell>Precio</TableCell>
                     <TableCell>Próximo Vencimiento</TableCell>
@@ -952,6 +1062,30 @@ const AdminDashboard = () => {
                       <TableCell>{cliente.nombre} {cliente.apellido}</TableCell>
                       <TableCell>{cliente.telefono}</TableCell>
                       <TableCell>{cliente.tipoVehiculo}</TableCell>
+                      <TableCell>
+                        <Chip 
+                          label={
+                            cliente.modalidadTiempo === 'nocturna' ? '🌙 Nocturna' :
+                            cliente.modalidadTiempo === 'diurna' ? '☀️ Diurna' :
+                            cliente.modalidadTiempo === '24hs' ? '⏰ 24hs' :
+                            cliente.modalidadTiempo || 'No definida'
+                          }
+                          size="small"
+                          color={
+                            cliente.modalidadTiempo === 'nocturna' ? 'secondary' :
+                            cliente.modalidadTiempo === 'diurna' ? 'primary' :
+                            cliente.modalidadTiempo === '24hs' ? 'success' :
+                            'default'
+                          }
+                          sx={{
+                            fontWeight: 'bold',
+                            ...(cliente.modalidadTiempo === 'nocturna' && {
+                              bgcolor: '#3f51b5',
+                              color: 'white'
+                            })
+                          }}
+                        />
+                      </TableCell>
                       <TableCell>
                         {cliente.empleadoAsignado ? 
                           cliente.empleadoAsignado.split('@')[0].charAt(0).toUpperCase() + cliente.empleadoAsignado.split('@')[0].slice(1) :
