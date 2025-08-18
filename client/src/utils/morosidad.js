@@ -125,6 +125,18 @@ export const calcularEstadoPeriodos = (periodos, pagos = []) => {
     console.log('=== FIN DEBUG ASIGNACIÓN ===\n');
   }
   
+  if (esArmando) {
+    console.log('\n=== RESULTADO FINAL ASIGNACIÓN ===');
+    periodosConEstado.forEach(p => {
+      console.log(`Período ${p.numero} (${p.fechaInicio.format('DD/MM/YYYY')} - ${p.fechaFin.format('DD/MM/YYYY')}): ${p.estado}${p.pago ? ` - Pago: ${p.pago.fecha.format('DD/MM/YYYY')} $${p.pago.monto}` : ''}`);
+    });
+    
+    const periodosConPago = periodosConEstado.filter(p => p.estado === 'CON_PAGO');
+    const periodosSinPago = periodosConEstado.filter(p => p.estado === 'SIN_PAGO');
+    console.log(`\nResumen: ${periodosConPago.length} períodos con pago, ${periodosSinPago.length} sin pago`);
+    console.log('=== FIN DEBUG ASIGNACIÓN ===\n');
+  }
+  
   return periodosConEstado;
 };
 
@@ -134,13 +146,27 @@ export const calcularEstadoCliente = (cliente, pagos = []) => {
     return { estado: 'sin_fecha', diasVencido: 0, color: 'warning', mesesAdeudados: 0, deudaTotal: 0 };
   }
   
+  // Debug específico para Laura García
+  const esLaura = cliente.nombre?.toLowerCase().includes('laura') && cliente.apellido?.toLowerCase().includes('garcia');
+  if (esLaura) {
+    console.log('👩 DEBUG LAURA GARCÍA - MOROSIDAD:');
+    console.log('  - Fecha ingreso:', cliente.fechaIngreso);
+    console.log('  - Días vencimiento:', cliente.diasVencimiento || 30);
+    console.log('  - Precio cliente:', cliente.precio);
+    console.log('  - Es cliente antiguo:', cliente.esClienteAntiguo);
+    console.log('  - Precio base:', cliente.precioBase);
+    console.log('  - Total pagos recibidos:', pagos.filter(p => p.clienteId === cliente.id).length);
+  }
+  
   const diasVencimiento = cliente.diasVencimiento || 30;
   const periodos = calcularPeriodosMensuales(cliente.fechaIngreso, diasVencimiento);
   const periodosConEstado = calcularEstadoPeriodos(periodos, pagos.filter(p => p.clienteId === cliente.id));
   
-  // Contar períodos sin pago que ya vencieron
-  const periodosSinPago = periodosConEstado.filter(p => p.estado === 'SIN_PAGO' && p.vencido);
-  const mesesAdeudados = periodosSinPago.length;
+  // Contar SOLO períodos sin pago que ya vencieron (no los que tienen pago)
+  const periodosSinPagoVencidos = periodosConEstado.filter(p => 
+    p.estado === 'SIN_PAGO' && p.vencido
+  );
+  const mesesAdeudados = periodosSinPagoVencidos.length;
   
   // Usar precio personalizado si es cliente antiguo, sino precio normal
   const precioAUsar = cliente.esClienteAntiguo && cliente.precioBase ? 
@@ -149,27 +175,50 @@ export const calcularEstadoCliente = (cliente, pagos = []) => {
   
   const deudaTotal = mesesAdeudados * precioAUsar;
   
+  // Debug para Laura
+  if (esLaura) {
+    console.log('  - Meses adeudados (SIN PAGO + VENCIDOS):', mesesAdeudados);
+    console.log('  - Deuda total:', deudaTotal);
+    console.log('  - Períodos sin pago vencidos:', periodosSinPagoVencidos.length);
+    periodosSinPagoVencidos.forEach((p, i) => {
+      console.log(`    Período ${i+1}: ${p.fechaInicio.format('DD/MM/YYYY')} - ${p.fechaFin.format('DD/MM/YYYY')} (${p.diasVencido} días vencido)`);
+    });
+  }
+  
   // Si no hay períodos vencidos sin pago, está al día
   if (mesesAdeudados === 0) {
+    if (esLaura) console.log('  - RESULTADO: Al día');
     return { estado: 'al_dia', diasVencido: 0, color: 'success', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
   }
   
-  // Encontrar el período más antiguo sin pago (el primero en la lista)
-  const primerPeriodoSinPago = periodosSinPago[0];
+  // Encontrar el período más antiguo sin pago Y vencido (el primero en la lista)
+  const primerPeriodoSinPago = periodosSinPagoVencidos[0];
   const diasAtraso = primerPeriodoSinPago ? primerPeriodoSinPago.diasVencido : 0;
   
-  // Nuevo criterio basado en días de atraso
-  if (diasAtraso <= 5) {
-    return { estado: 'al_dia', diasVencido: diasAtraso, color: 'success', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
-  } else if (diasAtraso <= 15) {
-    return { estado: 'advertencia', diasVencido: diasAtraso, color: 'warning', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
-  } else if (diasAtraso <= 30) {
-    return { estado: 'vencido', diasVencido: diasAtraso, color: 'error', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
-  } else if (diasAtraso <= 60) {
-    return { estado: 'moroso', diasVencido: diasAtraso, color: 'error', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
-  } else {
-    return { estado: 'critico', diasVencido: diasAtraso, color: 'error', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
+  if (esLaura) {
+    console.log('  - Primer período sin pago:', primerPeriodoSinPago ? `${primerPeriodoSinPago.fechaInicio.format('DD/MM/YYYY')} - ${primerPeriodoSinPago.fechaFin.format('DD/MM/YYYY')}` : 'Ninguno');
+    console.log('  - Días de atraso:', diasAtraso);
   }
+  
+  // Nuevo criterio basado en días de atraso
+  let resultado;
+  if (diasAtraso <= 5) {
+    resultado = { estado: 'al_dia', diasVencido: diasAtraso, color: 'success', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
+  } else if (diasAtraso <= 15) {
+    resultado = { estado: 'advertencia', diasVencido: diasAtraso, color: 'warning', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
+  } else if (diasAtraso <= 30) {
+    resultado = { estado: 'vencido', diasVencido: diasAtraso, color: 'error', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
+  } else if (diasAtraso <= 60) {
+    resultado = { estado: 'moroso', diasVencido: diasAtraso, color: 'error', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
+  } else {
+    resultado = { estado: 'critico', diasVencido: diasAtraso, color: 'error', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
+  }
+  
+  if (esLaura) {
+    console.log('  - RESULTADO FINAL:', resultado.estado, `(${resultado.diasVencido} días, $${resultado.deudaTotal})`);
+  }
+  
+  return resultado;
 };
 
 export const getEstadoTexto = (estadoInfo) => {

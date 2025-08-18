@@ -82,6 +82,23 @@ const DetectorPreciosDesactualizados = () => {
             })));
           }
           
+          // Debug específico para Laura García
+          if (cliente.nombre?.toLowerCase().includes('laura') && cliente.apellido?.toLowerCase().includes('garcia')) {
+            console.log('👩 DEBUG LAURA GARCÍA:');
+            console.log('  - Fecha ingreso:', cliente.fechaIngreso);
+            console.log('  - Días vencimiento:', cliente.diasVencimiento || 30);
+            console.log('  - Precio cliente:', cliente.precio);
+            console.log('  - Precio configurado:', precioConfigurado);
+            console.log('  - Total pagos cliente:', pagosCliente.length);
+            console.log('  - Último monto pagado:', ultimoMontoPagado);
+            console.log('  - Diferencia precio:', diferencia);
+            console.log('  - Pagos del cliente:', pagosCliente.map(p => ({
+              fecha: p.fechaRegistro,
+              monto: p.monto,
+              estado: p.estado
+            })));
+          }
+          
           const diferencia = precioConfigurado - ultimoMontoPagado;
           
           return {
@@ -101,6 +118,15 @@ const DetectorPreciosDesactualizados = () => {
           // Debug para Rosa
           if (cliente.nombre?.toLowerCase().includes('rosa') || cliente.apellido?.toLowerCase().includes('germano')) {
             console.log('🌹 FILTRO ROSA:', {
+              necesitaAjuste: cliente.necesitaAjuste,
+              alertaPrecioEstancado: cliente.alertaPrecioEstancado,
+              pasaFiltro: cliente.necesitaAjuste || cliente.alertaPrecioEstancado
+            });
+          }
+          
+          // Debug para Laura García
+          if (cliente.nombre?.toLowerCase().includes('laura') && cliente.apellido?.toLowerCase().includes('garcia')) {
+            console.log('👩 FILTRO LAURA GARCÍA:', {
               necesitaAjuste: cliente.necesitaAjuste,
               alertaPrecioEstancado: cliente.alertaPrecioEstancado,
               pasaFiltro: cliente.necesitaAjuste || cliente.alertaPrecioEstancado

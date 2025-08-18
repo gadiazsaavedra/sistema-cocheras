@@ -44,15 +44,26 @@ const HistorialPagos = ({ open, onClose, cliente, AlertaAdelanto }) => {
         setClienteActualizado(clienteActual);
       }
       
-      // Forzar recarga de pagos sin cache
+      // Forzar recarga de pagos sin cache con límite alto
       const response = await pagosFirestore.obtener({ 
-        limite: 200,
+        limite: 500,
         timestamp: Date.now() // Evitar cache
       });
       const todosPagos = response.datos || response;
       
       console.log('Total pagos cargados:', todosPagos.length);
       console.log('Buscando pagos para cliente:', cliente.id);
+      
+      // Debug específico para Horacio
+      if (cliente.nombre?.includes('Horacio')) {
+        console.log('🔍 DEBUG HORACIO HISTORIAL:');
+        console.log('Cliente ID:', cliente.id);
+        const pagosHoracio = todosPagos.filter(p => p.clienteId === cliente.id);
+        console.log('Pagos encontrados para Horacio:', pagosHoracio.length);
+        pagosHoracio.forEach((p, i) => {
+          console.log(`Pago ${i+1}: ${p.fechaRegistro} - $${p.monto} - Estado: ${p.estado}`);
+        });
+      }
       
       // Asegurar que todosPagos es un array
       if (!Array.isArray(todosPagos)) {
