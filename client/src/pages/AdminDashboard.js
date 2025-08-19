@@ -122,13 +122,13 @@ const AdminDashboard = () => {
   const cargarDatos = useCallback(async () => {
     try {
       // Cargar clientes con paginación
-      const clientesRes = await clientesFirestore.obtener({ limite: 100 });
+      const clientesRes = await clientesFirestore.obtener({ limite: 150 });
       setClientes(clientesRes.datos || clientesRes); // Compatibilidad
       
       // Cargar pagos con límites
       try {
-        // Obtener todos los pagos con límite optimizado
-        const todosPagosRes = await pagosFirestore.obtener({ limite: 150 });
+        // Obtener todos los pagos con límite alto para Laura
+        const todosPagosRes = await pagosFirestore.obtener({ limite: 300 });
         const todosPagos = todosPagosRes.datos || todosPagosRes;
         
         // Filtrar pagos pendientes localmente
