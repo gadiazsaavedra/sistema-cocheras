@@ -96,7 +96,7 @@ const EmpleadoDashboard = () => {
     setLoadingClientes(true);
     
     try {
-      const response = await clientesFirestore.obtener({ limite: 100 });
+      const response = await clientesFirestore.obtener({ limite: 150 });
       const todosClientes = response.datos || response;
       
       console.log('=== DEBUG EMPLEADO VICTOR ===');
@@ -152,7 +152,7 @@ const EmpleadoDashboard = () => {
       // CORREGIDO: Cargar TODOS los pagos para calcular morosidad correctamente
       // No filtrar por empleadoId porque necesitamos ver todos los pagos de todos los empleados
       const response = await pagosFirestore.obtener({ 
-        limite: 100 
+        limite: 300 
       });
       const pagosData = response.datos || response;
       setTodosLosPagos(pagosData);
