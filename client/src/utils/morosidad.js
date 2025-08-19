@@ -149,13 +149,14 @@ export const calcularEstadoCliente = (cliente, pagos = []) => {
   // Debug específico para Laura García
   const esLaura = cliente.nombre?.toLowerCase().includes('laura') && cliente.apellido?.toLowerCase().includes('garcia');
   if (esLaura) {
-    console.log('👩 DEBUG LAURA GARCÍA - MOROSIDAD:');
+    console.log('👩👩👩 DEBUG LAURA GARCÍA - MOROSIDAD:');
     console.log('  - Fecha ingreso:', cliente.fechaIngreso);
     console.log('  - Días vencimiento:', cliente.diasVencimiento || 30);
     console.log('  - Precio cliente:', cliente.precio);
     console.log('  - Es cliente antiguo:', cliente.esClienteAntiguo);
     console.log('  - Precio base:', cliente.precioBase);
     console.log('  - Total pagos recibidos:', pagos.filter(p => p.clienteId === cliente.id).length);
+    console.log('  - Hoy:', moment().format('DD/MM/YYYY'));
   }
   
   const diasVencimiento = cliente.diasVencimiento || 30;
@@ -177,11 +178,15 @@ export const calcularEstadoCliente = (cliente, pagos = []) => {
   
   // Debug para Laura
   if (esLaura) {
+    console.log('  - TODOS LOS PERÍODOS:');
+    periodosConEstado.forEach((p, i) => {
+      console.log(`    Período ${i+1}: ${p.fechaInicio.format('DD/MM/YYYY')} - ${p.fechaFin.format('DD/MM/YYYY')} | Estado: ${p.estado} | Vencido: ${p.vencido} | Días: ${p.diasVencido}`);
+    });
     console.log('  - Meses adeudados (SIN PAGO + VENCIDOS):', mesesAdeudados);
     console.log('  - Deuda total:', deudaTotal);
     console.log('  - Períodos sin pago vencidos:', periodosSinPagoVencidos.length);
     periodosSinPagoVencidos.forEach((p, i) => {
-      console.log(`    Período ${i+1}: ${p.fechaInicio.format('DD/MM/YYYY')} - ${p.fechaFin.format('DD/MM/YYYY')} (${p.diasVencido} días vencido)`);
+      console.log(`    ❌ Período SIN PAGO: ${p.fechaInicio.format('DD/MM/YYYY')} - ${p.fechaFin.format('DD/MM/YYYY')} (${p.diasVencido} días vencido)`);
     });
   }
   
