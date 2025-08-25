@@ -205,15 +205,15 @@ export const calcularEstadoCliente = (cliente, pagos = []) => {
     console.log('  - Días de atraso:', diasAtraso);
   }
   
-  // Nuevo criterio basado en días de atraso
+  // Nuevo criterio de morosidad según esquema solicitado
   let resultado;
-  if (diasAtraso <= 5) {
+  if (diasAtraso === 0) {
     resultado = { estado: 'al_dia', diasVencido: diasAtraso, color: 'success', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
-  } else if (diasAtraso <= 15) {
+  } else if (diasAtraso >= 1 && diasAtraso <= 4) {
     resultado = { estado: 'advertencia', diasVencido: diasAtraso, color: 'warning', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
-  } else if (diasAtraso <= 30) {
+  } else if (diasAtraso >= 5 && diasAtraso <= 9) {
     resultado = { estado: 'vencido', diasVencido: diasAtraso, color: 'error', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
-  } else if (diasAtraso <= 60) {
+  } else if (diasAtraso >= 10 && diasAtraso <= 15) {
     resultado = { estado: 'moroso', diasVencido: diasAtraso, color: 'error', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
   } else {
     resultado = { estado: 'critico', diasVencido: diasAtraso, color: 'error', mesesAdeudados, deudaTotal, periodos: periodosConEstado };
